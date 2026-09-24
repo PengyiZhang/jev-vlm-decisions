@@ -22,24 +22,12 @@ def make_scorer(args):
     if args.engine == "transformers":
         from .transformers_scorer import TransformersScorer as T
         return T(args.model, device=args.device)
-    if args.engine.startswith("vllm"):
-        # vLLM 离线引擎没有 processor；用 transformers 的 AutoProcessor
-        # 轻量解析图像占位符（只读配置不载权重），--image-token 可手动覆盖
-        if args.image_token:
-            image_token = args.image_token
-        else:
-            from transformers import AutoProcessor, AutoTokenizer
-
-            from .transformers_scorer import resolve_image_token
-            image_token = resolve_image_token(
-                AutoProcessor.from_pretrained(args.model),
-                AutoTokenizer.from_pretrained(args.model),
-            )
-        if args.engine == "vllm-perq":
-            from .vllm_scorers import VLLMPerQuestionScorer
-            return VLLMPerQuestionScorer(args.model, topk=args.topk, image_token=image_token)
+    if args.engine == "vllm-perq":
+        from .vllm_scorers import VLLMPerQuestionScorer
+        return VLLMPerQuestionScorer(args.model, topk=args.topk)
+    if args.engine == "vllm-plogprob":
         from .vllm_scorers import VLLMPromptLogprobsScorer
-        return VLLMPromptLogprobsScorer(args.model, topk=args.topk, image_token=image_token)
+        return VLLMPromptLogprobsScorer(args.model, topk=args.topk)
     raise SystemExit(f"未知引擎: {args.engine}")
 
 
@@ -52,8 +40,6 @@ def main() -> None:
                     choices=["transformers", "vllm-perq", "vllm-plogprob"],
                     help="transformers=单前向直读；vllm-perq=策略一每问独立请求；vllm-plogprob=策略二b占位符")
     ap.add_argument("--topk", type=int, default=20, help="vLLM logprobs 的 K（须 ≥ 候选字母数）")
-    ap.add_argument("--image-token", default=None,
-                    help="vLLM 引擎的图像占位符；缺省经 AutoProcessor 自动解析")
     ap.add_argument("--calibrator", default=None, help="calibrator.json 路径（可选）")
     ap.add_argument("--device", default="auto",
                     help="仅 transformers 引擎生效；vLLM 引擎用 CUDA_VISIBLE_DEVICES 选卡")

@@ -98,7 +98,7 @@ Startup self-checks: every letter must be a single token, and every answer ancho
 
 Measured runs of all three engines on a single crop (Qwen3.8-27B): [docs/runtime-en.md](docs/runtime-en.md).
 
-GPU selection for vLLM engines is via `CUDA_VISIBLE_DEVICES` (there is no `device` flag). Image placeholders differ per model family (`<|image_pad|>` for Qwen-style, `<|image|>` for gemma-4); the transformers engine resolves this automatically, vLLM engines accept `--image-token`.
+All three engines share the same chat-template assembly (`apply_chat_template`); image placeholders are injected by the model's own template. GPU selection for vLLM engines is via `CUDA_VISIBLE_DEVICES` (there is no `device` flag).
 
 ### Calibration
 
@@ -125,7 +125,7 @@ uv run --with pytest python -m pytest person_type_a/tests -q
 | --- | --- |
 | `schema.py` | scenario/question config, canonical ordering, abstain slot, K ≤ 26 guard |
 | `encoding.py` | letter assignment, single-token checks, in-context token-id resolution |
-| `prompt.py` | system/question text builders; raw-text layouts for vLLM |
+| `prompt.py` | system/question text builders and shared chat-message assembly |
 | `readout.py` | masked softmax (sparse top-K aware), three-level gating |
 | `calibrator.py` | per-bucket temperature fitting, ECE, `calibrator.json` I/O |
 | `engine.py` | `ClassifyTask` + `Scorer` protocol + fakes for dependency-free tests |

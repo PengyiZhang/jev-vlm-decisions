@@ -98,7 +98,7 @@ uv run --with torch --with transformers --with pillow \
 
 三引擎同图实测记录（Qwen3.8-27B）：[docs/runtime-zh.md](docs/runtime-zh.md)。
 
-vLLM 引擎选卡用 `CUDA_VISIBLE_DEVICES`（没有 `device` 参数）。图像占位符因模型家族而异（Qwen 系 `<|image_pad|>`、gemma-4 `<|image|>`）；transformers 引擎自动解析，vLLM 引擎可用 `--image-token` 指定。
+三引擎共享同一套 chat 模板组装（`apply_chat_template`），图像占位符由模型自带模板注入。vLLM 引擎选卡用 `CUDA_VISIBLE_DEVICES`（没有 `device` 参数）。
 
 ### 校准
 
@@ -125,7 +125,7 @@ uv run --with pytest python -m pytest person_type_a/tests -q
 | --- | --- |
 | `schema.py` | 场景/问题配置、规范化排序、弃权槽、K ≤ 26 校验 |
 | `encoding.py` | 字母分配、单 token 校验、上下文 token id 解析 |
-| `prompt.py` | 系统/问题文本构建；vLLM 裸文本布局 |
+| `prompt.py` | 系统/问题文本构建与共享 chat 消息组装 |
 | `readout.py` | 掩码 Softmax（支持稀疏 top-K）、三级门控 |
 | `calibrator.py` | 分桶温度拟合、ECE、`calibrator.json` 读写 |
 | `engine.py` | `ClassifyTask` + `Scorer` 协议 + 无依赖测试用的假实现 |

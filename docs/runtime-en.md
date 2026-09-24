@@ -19,7 +19,6 @@ Note: single-image measurement including first-call overhead; treat the latency 
 ```text
 usage: run_demo.py [-h] --scenario SCENARIO --model MODEL --image IMAGE
                    [--engine {transformers,vllm-perq,vllm-plogprob}] [--topk TOPK]
-                   [--image-token IMAGE_TOKEN] [--calibrator CALIBRATOR] [--device DEVICE]
 
 options:
   --scenario SCENARIO   path to the scenario JSON
@@ -28,7 +27,6 @@ options:
   --engine              transformers=single-forward readout; vllm-perq=one request per question;
                         vllm-plogprob=placeholder + prompt_logprobs
   --topk TOPK           vLLM logprobs K (must be >= the number of candidate letters)
-  --image-token         image placeholder for vLLM engines; auto-resolved via AutoProcessor by default
   --calibrator          optional calibrator.json path
   --device              transformers engine only; vLLM engines use CUDA_VISIBLE_DEVICES
 ```

@@ -1,24 +1,31 @@
-"""vLLM 双策略 Scorer。
+"""vLLM 双策略 Scorer（chat 模板路径）。
 
-策略一 VLLMPerQuestionScorer：每问独立请求（共享指令+图像前缀，靠 vLLM
-多模态前缀缓存复用图像），首 token 的 top-K logprobs 即该槽分布。
+与 transformers 引擎共用 prompt.chat_messages + apply_chat_template 渲染，
+三引擎输入一致，避免裸文本对 chat 模型构成 OOD 输入；图像占位符由模板
+注入，经 multi_modal_data 传给 vLLM。
+
+策略一 VLLMPerQuestionScorer：每问一组消息独立请求，add_generation_prompt
+追加 assistant 开头后，生成位置（模型被训练作答的位置）的 top-K logprobs
+即该槽分布；依赖 enable_prefix_caching 复用图像 Prefill。
 
 策略二b VLLMPromptLogprobsScorer：单请求占位符布局 + prompt_logprobs，
-图像必然只编码一次，不依赖缓存支持度；槽位分布条件于中性占位符常量。
+图像必然只编码一次；槽位分布条件于中性占位符常量。
 
-两策略返回的行都是稀疏 dict（token_id → logprob）。logprob 本身是
-全词表 log-softmax 值，readout.masked_softmax 在其上做温度缩放
-（p^(1/T) 归一）与 logits 路径同为合法温度族；校准与推理须用同一 scorer。
+两策略返回稀疏 dict 行（token_id → logprob）。logprob 是全词表
+log-softmax 值，readout.masked_softmax 在其上做温度缩放（p^(1/T) 归一）
+与 logits 路径同为合法温度族；校准与推理须用同一 scorer。
 
-vLLM 惰性导入：测试环境注入假引擎即可全链路验证；未装 vllm 时
-sampling 参数退化为 SimpleNamespace。
+vLLM 惰性导入：测试注入假引擎 + 假模板分词器即可全链路验证；未装
+vllm 时 sampling 参数退化为 SimpleNamespace。
 """
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 from .engine import ClassifyTask, SlotRow
-from .prompt import build_layout, build_single_question_prompt
+from .prompt import (
+    build_question_text, build_question_text_single, build_system_text, chat_messages,
+)
 from .transformers_scorer import find_subsequence
 
 
@@ -38,16 +45,12 @@ def _make_params(**kw):
 
 
 class _VLLMBase:
-    def __init__(self, model_id: str, engine=None, topk: int = 20,
-                 tokenizer=None, image_token: str = "<image>"):
+    def __init__(self, model_id: str, engine=None, topk: int = 20, tokenizer=None):
         self.model_id = model_id
         self._engine = engine
         self._tokenizer = tokenizer
         self.topk = topk
-        # 不同 VLM 的图像占位符不同（Qwen 系 <|image_pad|>、gemma-4 <|image|>），
-        # 按所用模型传入；transformers_scorer.resolve_image_token 的规则同样适用。
         # GPU 选择不在参数里：vLLM 由 CUDA_VISIBLE_DEVICES 环境变量控制
-        self.image_token = image_token
 
     def load(self, **llm_kwargs):
         """惰性建引擎。engine 已注入（测试）则跳过。"""
@@ -59,11 +62,17 @@ class _VLLMBase:
         if self._tokenizer is None:
             self._tokenizer = self._engine.get_tokenizer()
 
+    def _render(self, messages) -> str:
+        assert self._tokenizer is not None, "load() 或构造时注入 tokenizer"
+        return self._tokenizer.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=False
+        )
+
 
 class VLLMPerQuestionScorer(_VLLMBase):
-    """策略一：M 个独立请求。依赖前缀缓存复用图像，load 时自动开启
-    enable_prefix_caching；若所用 vLLM 版本不支持多模态前缀缓存，
-    图像 Prefill 会付 M 次，应改用策略二b。"""
+    """策略一：M 组消息独立请求。load 自动开 enable_prefix_caching；
+    若所用 vLLM 版本不支持多模态前缀缓存，图像 Prefill 会付 M 次，
+    应改用策略二b。"""
 
     def load(self, **llm_kwargs):
         llm_kwargs.setdefault("enable_prefix_caching", True)
@@ -71,17 +80,18 @@ class VLLMPerQuestionScorer(_VLLMBase):
 
     def slot_logits(self, task: ClassifyTask, image=None) -> dict[str, SlotRow]:
         params = _make_params(max_tokens=1, temperature=1.0, logprobs=self.topk)
+        system_text = build_system_text(task.system, task.scene, task.evidence)
         prompts = []
         for k, q in enumerate(task.questions, start=1):
-            entry = {"prompt": build_single_question_prompt(task.system, task.scene, task.evidence, q, k,
-                                                            image_token=self.image_token)}
+            messages = chat_messages(system_text, build_question_text_single(q, k), image)
+            entry = {"prompt": self._render(messages)}
             if image is not None:
                 entry["multi_modal_data"] = {"image": image}
             prompts.append(entry)
         outputs = self._engine.generate(prompts, params)
         rows: dict[str, SlotRow] = {}
         for q, out in zip(task.questions, outputs):
-            lp = out.outputs[0].logprobs[0]  # 首 token 位置的 top-K 分布
+            lp = out.outputs[0].logprobs[0]  # 生成位置的 top-K 分布
             rows[q.qid] = row_from_logprobs(lp)
         return rows
 
@@ -92,11 +102,12 @@ class VLLMPromptLogprobsScorer(_VLLMBase):
     PLACEHOLDER = "？"
 
     def slot_logits(self, task: ClassifyTask, image=None) -> dict[str, SlotRow]:
-        assert self._tokenizer is not None, "load() 或构造时注入 tokenizer"
         params = _make_params(max_tokens=1, temperature=1.0, prompt_logprobs=self.topk)
-        layout = build_layout(task.system, task.scene, task.evidence, task.questions,
-                              placeholder=self.PLACEHOLDER, image_token=self.image_token)
-        entry = {"prompt": layout.text}
+        qtext, slots = build_question_text(task.questions, placeholder=self.PLACEHOLDER)
+        messages = chat_messages(
+            build_system_text(task.system, task.scene, task.evidence), qtext, image
+        )
+        entry = {"prompt": self._render(messages)}
         if image is not None:
             entry["multi_modal_data"] = {"image": image}
         out = self._engine.generate([entry], params)[0]
@@ -104,7 +115,7 @@ class VLLMPromptLogprobsScorer(_VLLMBase):
         ids = list(out.prompt_token_ids)
         prompt_logprobs = out.prompt_logprobs
         rows: dict[str, SlotRow] = {}
-        for slot in layout.slots:
+        for slot in slots:
             anchor_ids = self._tokenizer.encode(slot.anchor + self.PLACEHOLDER,
                                                 add_special_tokens=False)
             pos = find_subsequence(ids, anchor_ids)

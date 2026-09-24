@@ -19,7 +19,6 @@
 ```text
 usage: run_demo.py [-h] --scenario SCENARIO --model MODEL --image IMAGE
                    [--engine {transformers,vllm-perq,vllm-plogprob}] [--topk TOPK]
-                   [--image-token IMAGE_TOKEN] [--calibrator CALIBRATOR] [--device DEVICE]
 
 options:
   --scenario SCENARIO   场景 JSON 路径
@@ -27,7 +26,6 @@ options:
   --image IMAGE         crop 图路径，可多次
   --engine              transformers=单前向直读；vllm-perq=每问独立请求；vllm-plogprob=占位符 prompt_logprobs
   --topk TOPK           vLLM logprobs 的 K（须 ≥ 候选字母数）
-  --image-token         vLLM 引擎的图像占位符；缺省经 AutoProcessor 自动解析
   --calibrator          calibrator.json 路径（可选）
   --device              仅 transformers 引擎生效；vLLM 引擎用 CUDA_VISIBLE_DEVICES 选卡
 ```
