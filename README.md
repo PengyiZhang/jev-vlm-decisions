@@ -20,7 +20,7 @@ This project follows the decision-model pattern popularized by [Jev](https://doc
 - **Calibration as a first-class concern.** Raw softmax is over-confident (a recurring finding across Jev reproductions). Temperatures are fitted per (question type × candidate count) bucket on a held-out labeled set, in the spirit of RLCD-style calibrated training — but training-free.
 - **Abstention built in.** Every question carries an explicit `__insufficient_evidence__` slot; when it wins, the result is routed to a human, never auto-executed.
 
-The full design rationale, failure modes, and an 18-repository field study of the Jev ecosystem live in the companion essay [`understanding-jev`](https://github.com/PengyiZhang/understanding-jev).
+The full design rationale, failure modes, and an 18-repository field study of the Jev ecosystem live in the companion essay [`understanding-jev`](https://github.com/PengyiZhang/understanding-jev). Both write-ups ship with this repo (in Chinese): the long-form essay [docs/jev-starter.md](docs/jev-starter.md) and the ecosystem field study [docs/jev-ecosystem-research.md](docs/jev-ecosystem-research.md).
 
 ### How it works
 

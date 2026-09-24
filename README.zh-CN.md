@@ -20,7 +20,7 @@
 - **校准是一等公民。** 裸 Softmax 普遍过度自信（Jev 复现生态反复验证的结论）。温度按（问题类型 × 候选数）分桶、在留出标注集上拟合——RLCD 式校准训练的精神，但零训练。
 - **弃权内置。** 每个问题都带显式 `__insufficient_evidence__` 槽；弃权胜出时恒转人工，绝不自动执行。
 
-完整设计依据、失败模式与 18 仓 Jev 生态实地研究见姊妹长文 [`understanding-jev`](https://github.com/PengyiZhang/understanding-jev)。
+完整设计依据、失败模式与 18 仓 Jev 生态实地研究见姊妹长文 [`understanding-jev`](https://github.com/PengyiZhang/understanding-jev)。两篇正文已随本仓库收录：[万字解读长文](docs/jev-starter.md)（机制拆解 / 失败模式 / 设计模式 / 生产架构）与 [18 仓生态实地研究](docs/jev-ecosystem-research.md)（复现路线 / 校准光谱 / 失败实证）。
 
 ### 工作原理
 
