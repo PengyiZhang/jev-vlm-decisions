@@ -98,6 +98,8 @@ Startup self-checks: every letter must be a single token, and every answer ancho
 | Logits access | full vocab | top-K (sparse) | top-K (sparse) |
 | Notes | chat-template assembly, max control | `enable_prefix_caching` on by default | read at placeholder positions via `prompt_logprobs` |
 
+Measured runs of all three engines on a single crop (Qwen3.8-27B): [docs/runtime-en.md](docs/runtime-en.md).
+
 GPU selection for vLLM engines is via `CUDA_VISIBLE_DEVICES` (there is no `device` flag). Image placeholders differ per model family (`<|image_pad|>` for Qwen-style, `<|image|>` for gemma-4); the transformers engine resolves this automatically, vLLM engines accept `--image-token`.
 
 ### Calibration
@@ -172,7 +174,7 @@ uv run --with torch --with transformers --with pillow \
 
 场景 JSON 用 `system` 字段注入任务（换掉它和 questions 即可改造成损毁检测、单据分类、UI 状态判断等任意闭集视觉决策）；`choice` 最多 25 选项 + 自动追加弃权槽，`binary` 固定 no/unclear/yes。
 
-三个推理引擎：`transformers`（chat template 组装、单前向读全部槽，控制力最强）、`vllm-perq`（每问独立请求 + 前缀缓存）、`vllm-plogprob`（占位符 + prompt_logprobs，图像必然只编码一次）。vLLM 引擎选卡用 `CUDA_VISIBLE_DEVICES`，图像占位符因模型而异（Qwen 系 `<|image_pad|>`、gemma-4 `<|image|>`）。
+三个推理引擎：`transformers`（chat template 组装、单前向读全部槽，控制力最强）、`vllm-perq`（每问独立请求 + 前缀缓存）、`vllm-plogprob`（占位符 + prompt_logprobs，图像必然只编码一次）。vLLM 引擎选卡用 `CUDA_VISIBLE_DEVICES`，图像占位符因模型而异（Qwen 系 `<|image_pad|>`、gemma-4 `<|image|>`）。三引擎同图实测记录见 [docs/runtime-zh.md](docs/runtime-zh.md)。
 
 ### 校准流程
 
