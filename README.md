@@ -1,6 +1,6 @@
 # Single-Forward VLM Decision Engine
 
-[中文](#中文) | **English**
+**[中文](README.zh-CN.md)** | English
 
 **Jev-style letter-slot decisions for vision-language models.** One forward pass turns any VLM into a millisecond-level image decision engine: no autoregressive decoding, no JSON parsing, calibrated probability distributions out of the box.
 
@@ -8,8 +8,6 @@
 [ptype] airport ground staff (0.85)  gate=auto  abstain=0.01
     airport ground staff (0.85)  flight attendant (0.10)  passenger (0.05)
 ```
-
-## English
 
 ### Why
 
@@ -146,50 +144,6 @@ uv run --with pytest python -m pytest person_type_a/tests -q
 - [TypeSafe's Jev](https://docs.typesafe.ai/) and Archer Hume's architecture write-ups for the decision-model pattern this project implements.
 - The open reproduction community — `kev` (pointer-head + branch masks), `bespokelabsai/nimble` (open recipe + human-labeled benchmarks), `Mapika/decider-2b` (three primitives), `rlcd-modernbert-151m` (per-cardinality temperatures) — for empirically validating the design choices summarized here.
 
-## 中文
+### License
 
-### 这是什么
-
-把任意 VLM 变成毫秒级的图像决策引擎：候选渲染成字母槽、答案槽留空，**一次前向**读出每个槽位的 next-token Logits，掩码 Softmax 直接得到概率分布——零自回归解码、零 JSON 解析、天然不会输出非法格式。思路来自 Jev（TypeSafe 的 System One 决策模型）及其开源生态，完整动机、失败模式与 18 仓生态实测见姊妹长文 [`understanding-jev`](https://github.com/PengyiZhang/understanding-jev)。
-
-核心特性：
-
-- **任务经 system 提示词注入**：引擎与任务无关，场景 JSON 定义指令与问题；人员类型分类只是内置示例
-- **弃权槽内置**：证据不足时模型弃权而非硬猜，弃权胜出恒转人工
-- **分桶温度校准**：按（问题类型 × 候选数）在留出标注集上拟合温度，配套 ECE 度量；未校准时置信度只做排序参考
-- **三级门控**：auto ≥ 0.90 / review 0.60~0.90 / human < 0.60
-
-### 快速开始
-
-```bash
-uv run --with torch --with transformers --with pillow \
-    python -m person_type_a.run_demo \
-    --scenario person_type_a/scenarios/terminal.json \
-    --model /path/to/your-vlm --image crop1.jpg --engine transformers
-```
-
-启动自检：字母单 token 校验 + 答案锚定位校验，失败立即退出。
-
-### 场景定义与三引擎
-
-场景 JSON 用 `system` 字段注入任务（换掉它和 questions 即可改造成损毁检测、单据分类、UI 状态判断等任意闭集视觉决策）；`choice` 最多 25 选项 + 自动追加弃权槽，`binary` 固定 no/unclear/yes。
-
-三个推理引擎：`transformers`（chat template 组装、单前向读全部槽，控制力最强）、`vllm-perq`（每问独立请求 + 前缀缓存）、`vllm-plogprob`（占位符 + prompt_logprobs，图像必然只编码一次）。vLLM 引擎选卡用 `CUDA_VISIBLE_DEVICES`，图像占位符因模型而异（Qwen 系 `<|image_pad|>`、gemma-4 `<|image|>`）。三引擎同图实测记录见 [docs/runtime-zh.md](docs/runtime-zh.md)。
-
-### 校准流程
-
-用真实检测器产出的 crop 按人/视频源切分 train/calibration/test（严禁按帧切）；温度只在 calibration 拟合、只在 test 报 ECE；`--calibrator calibrator.json` 注入服务。
-
-### 测试
-
-```bash
-uv run --with pytest python -m pytest person_type_a/tests -q
-```
-
-核心逻辑纯标准库，无 torch/vLLM 依赖即可全量测试。
-
-### 路线图
-
-- 路线 B：逐候选 yes 打分扇出（结构性免疫选项干扰）
-- 路线 C：字母槽交叉熵 LoRA 微调（每类 ≥300 标注后启动）
-- 远程服务化 scorer（OpenAI 兼容端点、跨租户连续批处理）
+MIT — see [LICENSE](LICENSE).
