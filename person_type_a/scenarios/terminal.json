@@ -1,0 +1,31 @@
+{
+  "name": "terminal",
+  "system": "你是机场监控的人员分类器。只输出选项字母，不解释。",
+  "scene": "航站楼到港层，行人 cropped 图像",
+  "evidence": ["制服样式", "反光背心", "工牌与证件", "行李特征"],
+  "questions": [
+    {
+      "qid": "ptype",
+      "kind": "choice",
+      "instructions": "图中人员属于哪种类型？",
+      "options": [
+        "airport ground staff",
+        "airline agent",
+        "cleaning staff",
+        "flight attendant",
+        "passenger",
+        "security staff"
+      ],
+      "criteria": [
+        "地面作业制服、反光背心",
+        "值机柜台制服",
+        "保洁工装",
+        "航司制服丝巾",
+        "普通旅客装束",
+        "安保制服"
+      ]
+    },
+    { "qid": "vest", "kind": "binary", "instructions": "是否穿着反光背心？" },
+    { "qid": "luggage", "kind": "binary", "instructions": "是否携带可见行李？" }
+  ]
+}

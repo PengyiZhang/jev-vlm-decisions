@@ -1,0 +1,43 @@
+{
+  "name": "apron",
+  "system": "你是机场监控的人员分类器。只输出选项字母，不解释。",
+  "scene": "机坪作业区，行人 cropped 图像",
+  "evidence": ["高可视服等级", "耳罩与安全帽", "手持工具", "作业位置与车辆"],
+  "questions": [
+    {
+      "qid": "ptype",
+      "kind": "choice",
+      "instructions": "图中人员属于哪种类型？",
+      "options": [
+        "baggage handler",
+        "captain",
+        "catering driver",
+        "de-icing crew",
+        "escort staff",
+        "first officer",
+        "fueler",
+        "line mechanic",
+        "marshaller",
+        "ramp agent",
+        "tug driver",
+        "visitor"
+      ],
+      "criteria": [
+        "装卸工装、行李拖车旁",
+        "机长制服四道杠",
+        "送餐车与保温箱",
+        "除冰服与喷枪软管",
+        "监护员背心、站位于设备外侧",
+        "副驾驶制服三道杠",
+        "加油服与燃油管接头",
+        "机务工装、手持工具包",
+        "引导牌或发光指挥棒",
+        "机坪协调员制服",
+        "拖车驾驶室",
+        "访客反光背心与陪同标识"
+      ]
+    },
+    { "qid": "hi_vis", "kind": "binary", "instructions": "是否穿着高可视服？" },
+    { "qid": "hearing_protection", "kind": "binary", "instructions": "是否佩戴耳罩等听力防护？" }
+  ]
+}

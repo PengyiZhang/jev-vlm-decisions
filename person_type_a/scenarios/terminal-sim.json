@@ -1,0 +1,49 @@
+{
+  "name": "terminal",
+  "system": "你是机场监控的人员分类器。只输出选项字母，不解释。",
+  "scene": "航站楼到港层，单个行人图像",
+  "evidence": [],
+  "questions": [
+    {
+      "qid": "ptype",
+      "kind": "choice",
+      "instructions": "图中人员属于哪种类型？",
+      "options": [
+        "airport ground staff",
+        "flight attendant",
+        "passenger"
+      ],
+      "criteria": [
+        "地面作业制服、反光背心、安保制服、保洁工装",
+        "值机柜台制服、航司制服丝巾",
+        "普通旅客装束"
+      ]
+    },
+    { "qid": "性别", "kind": "binary", "instructions": "性别是男性吗？" },
+    { 
+      "qid": "头发颜色", 
+      "kind": "choice", 
+      "instructions": "头发颜色属于哪种类型？" ,
+      "options": [
+        "black",
+        "gray",
+        "white",
+        "green",
+        "blue",
+        "red",
+        "other"
+      ]
+    },
+    { 
+      "qid": "年龄段", 
+      "kind": "choice", 
+      "instructions": "属于哪个年龄段？" ,
+      "options": [
+        "儿童",
+        "青少年",
+        "中年",
+        "老年"
+      ]
+    }
+  ]
+}
