@@ -133,6 +133,50 @@ r(q, y) = log_score(q, y) + w_sph · spherical(q, y) − w_rps · RPS(q, y) · 1
 - 关键发现：**把候选元素放进 option 列表而非塞进 state**，top-1 从 0.44 → 0.51——与我们"判据放共享区、选项独立槽"的布局纪律同源
 - 对齐 jev-ultrafast 的 `/v1/systemone` 格式，与 decoder 生态互通
 
+## 三点五、决策生成机制：与 decoder 三引擎的根本差异
+
+### laya 怎么"生成"决策：[MASK] 标记打分
+
+laya 没有生成循环，也没有字母槽——它的决策读取发生在**序列内部的标记位置**：
+
+```text
+[CLS] <问题类型> instructions [SEP] [MASK] 选项0 [MASK] 选项1 ... [SEP] state [SEP]
+                              ↑marker    ↑marker
+一次 encoder 前向（双向注意力）
+  → 每个选项前的 [MASK] 位置隐向量 h_i
+  → scorer：2 层 Transformer head + MLP，把 h_i 映射为该选项的 logit
+  → 全部选项 logit 一次 Softmax = 该问题的分布
+```
+
+三原语的读取方式（`laya/common.py`）：
+- **choice**：argmax + 全分布（marker logit 直接归一）
+- **score**：期望分 Σᵢ i·pᵢ（等级值加权），保留犹豫信息
+- **noul**：固定 [false] [true] 两个 marker，P(true) 即答案
+
+关键机制差异：**选项文本本身进入序列、通过 [MASK] 槽与全局上下文双向交互**。decoder 路线里"候选"最终坍缩成一个字母 token 的 logits；encoder 路线里候选始终保持为完整语义实体，由 marker 位置聚合表征。这带来两个结构性后果：
+1. 选项容量受 token 预算限制（`head_max_len`，约 20 个选项）——选项文本必须全部塞进序列；
+2. 选项间不存在"首 token 碰撞"与"顺序稀释"问题（无字母、双向注意力把所有选项置于对称位置），但代价是全注意力的选项间竞争依然存在（与 decoder 的干扰形式不同源）。
+
+### 与本项目三引擎的机制对照
+
+| 维度 | laya（encoder+marker） | transformers（锚位直读） | vllm-perq（生成位 top-K） | vllm-plogprob（哑字母+prompt_logprobs） |
+| --- | --- | --- | --- | --- |
+| 底座 | 双向 encoder（421M，纯文本） | decoder VLM（27B 级） | decoder VLM | decoder VLM |
+| 候选编码 | 选项文本进序列，[MASK] 槽 | 字母槽（选项文本在 prompt） | 字母槽，每问独立 | 字母槽 + 候选集外哑字母 |
+| 读取位置 | marker 位隐向量 → MLP logit | 锚位全词表 Logits 直读 | 生成位（assistant 头后）top-K | 哑字母位 prompt_logprobs top-K |
+| 注意力方向 | **双向**（选项对称、全文互见） | 单向因果 | 单向因果，问题隔离 | 单向因果 |
+| 槽位分布条件于 | 全部选项文本 + state | 各问题文本，无答案 | 仅本问文本 | 问题文本 + 哑字母常量 |
+| 选项容量 | ~20（token 预算） | 25+弃权 | 26 | 26 |
+| 视觉输入 | ❌（无视觉塔） | ✅ | ✅ | ✅ |
+| 训练需求 | **必须微调**（基座 0.362 低于多数类基线） | 零训练 | 零训练 | 零训练 |
+| 稳态延迟 | 32.8 ms（T4） | 271 ms（A100） | 239 ms（A100） | 182 ms（A100） |
+
+三个值得记的对照结论：
+
+1. **速度来源不同**：laya 快是因为模型小 65 倍（421M vs 27B）且无模板开销；我们 plogprob 的 182ms 是在 27B 上做到的——零解码在这个量级依然成立，但小模型上 encoder 路线的绝对延迟不可追赶。
+2. **独立性语义三方不同**：perq 完全隔离（问题互不可见）、plogprob 条件于哑字母常量、laya 条件于全部选项的双向上下文——三者给出三种不同的"问题间条件分布"，校准口径都不可互换（再次印证同引擎同布局校准原则）。
+3. **训练-免训练的分界**：laya 必须微调才有能力（基座低于多数类基线），我们的字母槽零训练即可用——这是 decoder 预训练分布（instruction-following + 选项作答）带来的免费午餐；反过来 laya 微调后 ECE 可达 0.081，是我们路线 C 的标杆。
+
 ## 四、对 decoder 路线（jev-vlm-decisions）的启示
 
 1. **三条趋同演化**：per-K 桶温度（laya / rlcd-modernbert / 我们）、高基数的分层 vs 粗排两种解法、act_head 与我们三级门控的"升级信号"——不同底座独立收敛到同一组设计，说明这些是问题的本质结构而非风格
