@@ -132,13 +132,30 @@ top-K、全部吃到地板分**——见 `readout.LOW_SCORE`。
 
 1. **27B 上字母槽全面占优**：Qwen transformers 1453ms vs JSON 6230ms（**4.3×**），
    vLLM 1143/1188ms vs 1690ms（**1.5×**）。模型越大、解码越贵，零解码优势越大。
-2. **小模型上 JSON 延迟可能反超**：gemma-E4B（小 MoE，解码 ~90 tok/s）vLLM JSON
-   仅 507ms，快于字母槽（1083/1245ms）。perq 付 4 次 Prefill、plogprob 付全
-   prompt 逐位置 top-K 计算，而 E4B 的 46 步解码极便宜。此 regimes 下字母槽的
-   赢面是**结构性**的：概率分布 + 弃权 + 三级门控 + 免解析免 thinking 处理，
-   而非裸延迟。
+2. **冷启动下小模型 JSON 可短暂反超**（gemma-E4B vLLM JSON 507ms vs 字母槽
+   1083/1245ms）——但这是首轮开销的假象，稳态基准（下节）中 perq 借前缀缓存
+   降到 38ms、反超 11×。字母槽的结构性优势（分布/弃权/门控/免解析）在任何
+   regime 都成立，稳态下速度同样全面占优。
 3. **JSON 路径的脆弱性实测**：未显式关闭 thinking 时 27B 直接输出 26.8 秒的思考
    文本并解析失败——这正是"朴素 JSON 方案"的典型死法，且答案只有硬标签，
    无置信度可校准。
 4. 答案一致性：Qwen JSON 与字母槽 perq 的 Top-1 完全一致（flight attendant /
    yes / black / 中年），互为佐证。
+
+## 稳态基准（warmup=2 + 10 次重复，中位数，`benchmark.py`）
+
+| 模型 | 字母槽 transformers | 字母槽 perq | 字母槽 plogprob | JSON transformers | JSON vllm |
+| --- | --- | --- | --- | --- | --- |
+| Qwen3.8-27B | 271 ms | 239 ms | **182 ms** | 4233 ms | 1670 ms |
+| gemma-4-E4B | 132 ms | **38 ms** | 156 ms | 2762 ms | 427 ms |
+
+稳态结论：
+
+1. **预热后字母槽对 JSON 全面占优（同引擎 7~21×）**：Qwen transformers 15.6×、
+   Qwen vLLM 7.0×（perq）/ 9.2×（plogprob）、gemma transformers 20.9×、
+   gemma vLLM 11.2×（perq）。冷启动 ~1s 的首轮开销掩盖了这一差距——生产部署
+   必须预热。
+2. **最优引擎随模型而变**：27B 用 plogprob（182ms，单请求 + 前缀缓存）；小 MoE
+   用 perq（38ms，前缀缓存命中后 4 个短请求近乎零算力）。
+3. **plogprob 的逐位置 top-K 有固定开销**：gemma 上 p95 波动到 307ms；27B 上
+   该开销被解码优势盖过，反而最快。

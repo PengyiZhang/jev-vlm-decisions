@@ -151,15 +151,34 @@ Takeaways (same-engine comparisons):
    JSON 6230 ms (**4.3×**); vLLM 1143/1188 ms vs 1690 ms (**1.5×**). The bigger
    the model, the more expensive each decode step, the larger the zero-decode
    advantage.
-2. **On small models JSON can be faster**: gemma-E4B (small MoE, ~90 tok/s
-   decode) does vLLM JSON in 507 ms, beating letter-slot (1083/1245 ms). perq
-   pays 4 prefills; plogprob pays top-K logprobs for every prompt position;
-   E4B's 46 decode steps are simply cheap. In this regime letter-slot's case
-   is **structural**: distributions + abstention + three-level gating + no
-   parsing and no thinking-handling — not raw latency.
+2. **On cold start, JSON can briefly win on small models** (gemma-E4B vLLM
+   JSON 507 ms vs letter-slot 1083/1245 ms) — a first-call-overhead artifact;
+   the steady-state benchmark below drops perq to 38 ms via prefix caching, an
+   11× reversal. Letter-slot's structural advantages (distributions,
+   abstention, gating, no parsing) hold in every regime, and in steady state
+   so does the speed.
 3. **JSON fragility, measured**: with thinking left on, the 27B emits 26.8
    seconds of reasoning text and fails to parse — the canonical death of the
    naive JSON approach; and even on success you get hard labels with no
    confidence to calibrate.
 4. **Answer agreement**: Qwen JSON matches the letter-slot perq top-1 exactly
    (flight attendant / yes / black / middle-aged) — mutual corroboration.
+
+## Steady-state benchmark (warmup=2 + 10 runs, medians, `benchmark.py`)
+
+| Model | Letter transformers | Letter perq | Letter plogprob | JSON transformers | JSON vllm |
+| --- | --- | --- | --- | --- | --- |
+| Qwen3.8-27B | 271 ms | 239 ms | **182 ms** | 4233 ms | 1670 ms |
+| gemma-4-E4B | 132 ms | **38 ms** | 156 ms | 2762 ms | 427 ms |
+
+Steady-state takeaways:
+
+1. **Letter-slot beats JSON across the board once warm (7–21× same-engine)**:
+   Qwen transformers 15.6×, Qwen vLLM 7.0× (perq) / 9.2× (plogprob), gemma
+   transformers 20.9×, gemma vLLM 11.2× (perq). The ~1 s cold-start overhead
+   masks this gap — always warm up in production.
+2. **The best engine depends on the model**: plogprob for 27B (182 ms, single
+   request + prefix cache); perq for small MoEs (38 ms — with the prefix
+   cached, the four short requests cost nearly nothing).
+3. **plogprob's per-position top-K carries fixed overhead**: p95 swings to
+   307 ms on gemma; on 27B the decode advantage swamps it and it is fastest.
