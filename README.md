@@ -20,7 +20,7 @@ This project follows the decision-model pattern popularized by [Jev](https://doc
 - **Calibration as a first-class concern.** Raw softmax is over-confident (a recurring finding across Jev reproductions). Temperatures are fitted per (question type × candidate count) bucket on a held-out labeled set, in the spirit of RLCD-style calibrated training — but training-free.
 - **Abstention built in.** Every question carries an explicit `__insufficient_evidence__` slot; when it wins, the result is routed to a human, never auto-executed.
 
-The full design rationale, failure modes, and an 18-repository field study of the Jev ecosystem live in the companion essay [`understanding-jev`](https://github.com/PengyiZhang/understanding-jev). Both write-ups ship with this repo (in Chinese): the long-form essay [docs/jev-starter.md](docs/jev-starter.md) and the ecosystem field study [docs/jev-ecosystem-research.md](docs/jev-ecosystem-research.md).
+The full design rationale, failure modes, and an 18-repository field study of the Jev ecosystem live in the companion essay [`understanding-jev`](https://github.com/PengyiZhang/understanding-jev). Both write-ups ship with this repo (in Chinese): the long-form essay [docs/jev-starter.md](docs/jev-starter.md) and the ecosystem field study [docs/jev-ecosystem-research.md](docs/jev-ecosystem-research.md). Also included: a deep dive into `laya`, the encoder-route decision engine — its application surface incl. RAG ranking via embedding shortlists, and how proper-scoring-rule (RLCD-style) training turns calibration into a property of the objective — [docs/laya-deep-dive.md](docs/laya-deep-dive.md).
 
 ### How it works
 
