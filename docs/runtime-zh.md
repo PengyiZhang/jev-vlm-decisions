@@ -100,3 +100,45 @@ options:
 
 诊断指纹值得记住：**所有选项恰好均匀分布（0.25/0.125…）= 候选字母全部不在
 top-K、全部吃到地板分**——见 `readout.LOW_SCORE`。
+
+## gemma-4-E4B 三引擎（字母槽）
+
+同一图同一场景，`~/LLMs/gemma-4-E4B-it`：
+
+| 引擎 | 延迟 | 人员类型 | 性别 | 头发颜色 | 年龄段 |
+| --- | --- | --- | --- | --- | --- |
+| transformers | 1146 ms | passenger 0.68 | no 0.69 | black 0.80 | 老年 0.38（儿童 0.30） |
+| vllm-perq | 1083 ms | ground staff 0.68 | yes 1.00 | black 0.97 | 中年 0.95 |
+| vllm-plogprob | 1245 ms | passenger 0.68 | yes 1.00 | other 0.91 | **弃权 0.97** |
+
+解读：gemma 对这张图的读取与 Qwen 存在模型间差异（passenger vs ground staff），且
+**模型内部同样存在布局效应**——问题隔离（perq）后判断系统性变尖锐；plogprob 在
+年龄段上给出 0.97 的弃权，是哑字母机制下真实的弃权行为而非故障（分布非均匀）。
+
+## JSON 生成式基线对照
+
+`json_baseline.py`：同一场景、同一图、同一 chat 模板组装，让模型自回归生成 JSON
+答案（4 问，仅硬标签，无分布/弃权/门控）：
+
+| 模型 | 引擎 | 延迟 | 解码 token | 解析 | 答案 |
+| --- | --- | --- | --- | --- | --- |
+| Qwen3.8-27B | transformers（未关 thinking） | **26850 ms** | 256（顶满上限） | ❌ 失败 | 思考文本泄漏，未产出 JSON |
+| Qwen3.8-27B | transformers（关 thinking） | 6230 ms | 43 | ✅ | flight attendant / yes / black / 中年 |
+| Qwen3.8-27B | vLLM | 1690 ms | 43 | ✅ | flight attendant / yes / black / 中年 |
+| gemma-4-E4B | transformers | 4153 ms | 46 | ✅ | ground staff / yes / black / 中年 |
+| gemma-4-E4B | vLLM | **507 ms** | 46 | ✅ | ground staff / yes / black / 中年 |
+
+对照结论（同引擎比）：
+
+1. **27B 上字母槽全面占优**：Qwen transformers 1453ms vs JSON 6230ms（**4.3×**），
+   vLLM 1143/1188ms vs 1690ms（**1.5×**）。模型越大、解码越贵，零解码优势越大。
+2. **小模型上 JSON 延迟可能反超**：gemma-E4B（小 MoE，解码 ~90 tok/s）vLLM JSON
+   仅 507ms，快于字母槽（1083/1245ms）。perq 付 4 次 Prefill、plogprob 付全
+   prompt 逐位置 top-K 计算，而 E4B 的 46 步解码极便宜。此 regimes 下字母槽的
+   赢面是**结构性**的：概率分布 + 弃权 + 三级门控 + 免解析免 thinking 处理，
+   而非裸延迟。
+3. **JSON 路径的脆弱性实测**：未显式关闭 thinking 时 27B 直接输出 26.8 秒的思考
+   文本并解析失败——这正是"朴素 JSON 方案"的典型死法，且答案只有硬标签，
+   无置信度可校准。
+4. 答案一致性：Qwen JSON 与字母槽 perq 的 Top-1 完全一致（flight attendant /
+   yes / black / 中年），互为佐证。

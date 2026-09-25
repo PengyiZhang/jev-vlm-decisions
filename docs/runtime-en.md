@@ -114,3 +114,52 @@ fixed and locked by tests:
 The diagnostic signature is worth remembering: **every option at an exactly
 uniform probability (0.25 / 0.125 …) means no candidate letter made it into
 top-K at all — they all hit the floor score** (`readout.LOW_SCORE`).
+
+## gemma-4-E4B across three engines (letter-slot)
+
+Same image and scenario, `~/LLMs/gemma-4-E4B-it`:
+
+| Engine | Latency | Person type | Sex | Hair | Age |
+| --- | --- | --- | --- | --- | --- |
+| transformers | 1146 ms | passenger 0.68 | no 0.69 | black 0.80 | elderly 0.38 (child 0.30) |
+| vllm-perq | 1083 ms | ground staff 0.68 | yes 1.00 | black 0.97 | middle-aged 0.95 |
+| vllm-plogprob | 1245 ms | passenger 0.68 | yes 1.00 | other 0.91 | **abstain 0.97** |
+
+Notes: gemma reads this image differently from Qwen (passenger vs ground staff —
+a between-model difference), and the layout effect exists *within* a model too:
+isolation (perq) systematically sharpens judgments. The 0.97 abstain on the age
+question under plogprob is genuine abstention under the dummy-letter mechanism,
+not a failure (the distribution is not uniform).
+
+## JSON-generation baseline comparison
+
+`json_baseline.py`: same scenario, same image, same chat-template assembly,
+but the model autoregressively generates a JSON answer (4 questions, hard
+labels only — no distributions, abstention, or gating):
+
+| Model | Engine | Latency | Decode tokens | Parse | Answers |
+| --- | --- | --- | --- | --- | --- |
+| Qwen3.8-27B | transformers (thinking on) | **26850 ms** | 256 (cap hit) | ❌ failed | reasoning text leaked, no JSON |
+| Qwen3.8-27B | transformers (thinking off) | 6230 ms | 43 | ✅ | flight attendant / yes / black / middle-aged |
+| Qwen3.8-27B | vLLM | 1690 ms | 43 | ✅ | flight attendant / yes / black / middle-aged |
+| gemma-4-E4B | transformers | 4153 ms | 46 | ✅ | ground staff / yes / black / middle-aged |
+| gemma-4-E4B | vLLM | **507 ms** | 46 | ✅ | ground staff / yes / black / middle-aged |
+
+Takeaways (same-engine comparisons):
+
+1. **Letter-slot wins across the board at 27B**: Qwen transformers 1453 ms vs
+   JSON 6230 ms (**4.3×**); vLLM 1143/1188 ms vs 1690 ms (**1.5×**). The bigger
+   the model, the more expensive each decode step, the larger the zero-decode
+   advantage.
+2. **On small models JSON can be faster**: gemma-E4B (small MoE, ~90 tok/s
+   decode) does vLLM JSON in 507 ms, beating letter-slot (1083/1245 ms). perq
+   pays 4 prefills; plogprob pays top-K logprobs for every prompt position;
+   E4B's 46 decode steps are simply cheap. In this regime letter-slot's case
+   is **structural**: distributions + abstention + three-level gating + no
+   parsing and no thinking-handling — not raw latency.
+3. **JSON fragility, measured**: with thinking left on, the 27B emits 26.8
+   seconds of reasoning text and fails to parse — the canonical death of the
+   naive JSON approach; and even on success you get hard labels with no
+   confidence to calibrate.
+4. **Answer agreement**: Qwen JSON matches the letter-slot perq top-1 exactly
+   (flight attendant / yes / black / middle-aged) — mutual corroboration.
