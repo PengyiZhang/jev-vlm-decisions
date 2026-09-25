@@ -92,9 +92,9 @@ uv run --with torch --with transformers --with pillow \
 | 每图请求数 | 1 | M（每问一个） | 1 |
 | 图像 Prefill | 1 次 | 1 次（依赖多模态前缀缓存） | **必然 1 次** |
 | 解码步 | 0 | 0 | 0 |
-| 槽位分布条件于 | 各问题文本，无答案 | 仅本问文本 | 问题文本 + 中性占位符 |
+| 槽位分布条件于 | 各问题文本，无答案 | 仅本问文本 | 问题文本 + 候选集外哑字母 |
 | Logits 形态 | 全词表 | top-K（稀疏） | top-K（稀疏） |
-| 说明 | chat template 组装，控制力最强 | 默认开 `enable_prefix_caching` | 经 `prompt_logprobs` 读占位符位置 |
+| 说明 | chat template 组装，控制力最强 | 默认开 `enable_prefix_caching` | 哑字母槽位经 `prompt_logprobs` 读取 |
 
 三引擎同图实测记录（Qwen3.8-27B）：[docs/runtime-zh.md](docs/runtime-zh.md)。
 

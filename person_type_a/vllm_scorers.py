@@ -64,9 +64,16 @@ class _VLLMBase:
 
     def _render(self, messages) -> str:
         assert self._tokenizer is not None, "load() 或构造时注入 tokenizer"
-        return self._tokenizer.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=False
-        )
+        try:
+            # Qwen3.x 等模板默认在 assistant 头插入 <think>，生成位置落在思考块内，
+            # 答案字母进不了 top-K；enable_thinking=False 让生成位置直接落在答案区
+            return self._tokenizer.apply_chat_template(
+                messages, add_generation_prompt=True, tokenize=False, enable_thinking=False
+            )
+        except TypeError:
+            return self._tokenizer.apply_chat_template(
+                messages, add_generation_prompt=True, tokenize=False
+            )
 
 
 class VLLMPerQuestionScorer(_VLLMBase):
@@ -97,13 +104,20 @@ class VLLMPerQuestionScorer(_VLLMBase):
 
 
 class VLLMPromptLogprobsScorer(_VLLMBase):
-    """策略二b：单请求 + 占位符 + prompt_logprobs。"""
+    """策略二b：单请求 + 哑字母填充 + prompt_logprobs。
 
-    PLACEHOLDER = "？"
+    槽位填超出候选集的哑字母（4 候选填 E）：in-context 锚定"答案=字母"
+    格式；空槽会被强指令模型用 <|im_end|>/散文式作答挤掉字母（实测
+    Qwen3.8 空槽位 im_end logprob≈0、字母掉出 top-K），中性符号"？"
+    同样会被当成格式示例学舌。读哑字母位置的 prompt_logprobs，恰为
+    P(·|锚为止) 的答案分布，哑字母本身不在候选集、被读取层排除。
+    """
 
     def slot_logits(self, task: ClassifyTask, image=None) -> dict[str, SlotRow]:
+        from .encoding import dummy_letter
+
         params = _make_params(max_tokens=1, temperature=1.0, prompt_logprobs=self.topk)
-        qtext, slots = build_question_text(task.questions, placeholder=self.PLACEHOLDER)
+        qtext, slots = build_question_text(task.questions, fill_dummy=True)
         messages = chat_messages(
             build_system_text(task.system, task.scene, task.evidence), qtext, image
         )
@@ -115,13 +129,13 @@ class VLLMPromptLogprobsScorer(_VLLMBase):
         ids = list(out.prompt_token_ids)
         prompt_logprobs = out.prompt_logprobs
         rows: dict[str, SlotRow] = {}
-        for slot in slots:
-            anchor_ids = self._tokenizer.encode(slot.anchor + self.PLACEHOLDER,
-                                                add_special_tokens=False)
+        for slot, q in zip(slots, task.questions):
+            fill = dummy_letter(len(q.effective_options))
+            anchor_ids = self._tokenizer.encode(slot.anchor + fill, add_special_tokens=False)
             pos = find_subsequence(ids, anchor_ids)
             if pos < 0 or prompt_logprobs is None or prompt_logprobs[pos] is None:
                 raise RuntimeError(
-                    f"槽位 logprobs 缺失: {slot.anchor}（检查占位符定位 / topk 是否过小）"
+                    f"槽位 logprobs 缺失: {slot.anchor}（检查哑字母定位 / topk 是否过小）"
                 )
             rows[slot.qid] = row_from_logprobs(prompt_logprobs[pos])
         return rows

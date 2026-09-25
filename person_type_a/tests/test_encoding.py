@@ -52,3 +52,14 @@ def test_letter_token_id_resolves_in_context_variant():
 def test_letter_token_id_defaults_to_bare_when_context_clean():
     from person_type_a.encoding import letter_token_id
     assert letter_token_id(CharTokenizer(), "A", context="：") == ord("A")
+
+
+def test_dummy_letter_beyond_candidates():
+    from person_type_a.encoding import dummy_letter
+    assert dummy_letter(4) == "E"
+    assert dummy_letter(0) == "A"
+    try:
+        dummy_letter(26)
+        raise AssertionError("should reject")
+    except ValueError:
+        pass

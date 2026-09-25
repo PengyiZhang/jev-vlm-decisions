@@ -62,3 +62,11 @@ def test_chat_messages_structure_with_image():
 def test_chat_messages_without_image():
     msgs = chat_messages("sys", "qtext")
     assert all(c.get("type") != "image" for c in msgs[1]["content"])
+
+
+def test_fill_dummy_uses_letter_beyond_candidates():
+    text, slots = build_question_text(scenario_questions(), fill_dummy=True)
+    # ptype 3 选项 + 弃权 = 4 → 哑字母 E；binary 4 槽 → E
+    assert "答案 1：E" in text and "答案 2：E" in text
+    for s in slots:
+        assert text.count(s.anchor) == 1

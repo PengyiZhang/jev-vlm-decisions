@@ -85,10 +85,13 @@ def test_per_question_attaches_image():
     assert all("[IMG]" in p["prompt"] for p in seen)            # image 块被模板渲染
 
 
-def test_prompt_logprobs_reads_placeholder_positions():
+def test_prompt_logprobs_reads_dummy_letter_positions():
+    from person_type_a.encoding import dummy_letter
+
     tok = ChatTemplateTokenizer()
     t = task()
-    qtext, slots = build_question_text(t.questions, placeholder=VLLMPromptLogprobsScorer.PLACEHOLDER)
+    qtext, slots = build_question_text(t.questions, fill_dummy=True)
+    assert "答案 1：D" in qtext  # ptype 2 选项 + 弃权 = 3（A/B/C）→ 哑字母 D
     text = tok.apply_chat_template(
         chat_messages(build_system_text(t.system, t.scene, t.evidence), qtext),
         add_generation_prompt=True,
@@ -96,11 +99,11 @@ def test_prompt_logprobs_reads_placeholder_positions():
     ids = [ord(c) for c in text]
     lp = [None] * len(ids)
     expected = {}
-    for slot in slots:
-        anchor = slot.anchor + VLLMPromptLogprobsScorer.PLACEHOLDER
-        pos = find_subsequence(ids, [ord(c) for c in anchor])
+    for slot, q in zip(slots, t.questions):
+        fill = dummy_letter(len(q.effective_options))
+        pos = find_subsequence(ids, [ord(c) for c in slot.anchor + fill])
         row = {65: FakeLogprob(-0.1), 66: FakeLogprob(-2.0)}
-        lp[pos] = row
+        lp[pos] = row  # 哑字母位置的分布 = P(·|到冒号为止)
         expected[slot.qid] = {65: -0.1, 66: -2.0}
 
     class Engine:
@@ -151,3 +154,28 @@ def test_load_never_passes_device_and_perq_enables_prefix_caching(monkeypatch):
     s2 = VLLMPromptLogprobsScorer("m2", tokenizer=CharTokenizer(), topk=5)
     s2.load()
     assert s2._engine is not None and "device" not in recorded
+
+
+def test_render_disables_thinking_when_supported():
+    class RecordingTokenizer(ChatTemplateTokenizer):
+        def __init__(self):
+            self.seen_kwargs = None
+        def apply_chat_template(self, messages, **kw):
+            self.seen_kwargs = kw
+            return super().apply_chat_template(messages, **kw)
+
+    tok = RecordingTokenizer()
+    s = VLLMPerQuestionScorer("m", tokenizer=tok)
+    s._render([{"role": "user", "content": "x"}])
+    assert tok.seen_kwargs.get("enable_thinking") is False
+
+
+def test_render_falls_back_when_thinking_kwarg_unsupported():
+    class OldTemplateTokenizer(CharTokenizer):
+        def apply_chat_template(self, messages, **kw):
+            if "enable_thinking" in kw:
+                raise TypeError("unexpected keyword argument 'enable_thinking'")
+            return "OK"
+
+    s = VLLMPerQuestionScorer("m", tokenizer=OldTemplateTokenizer())
+    assert s._render([{"role": "user", "content": "x"}]) == "OK"

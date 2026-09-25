@@ -92,9 +92,9 @@ Startup self-checks: every letter must be a single token, and every answer ancho
 | Requests per image | 1 | M (one per question) | 1 |
 | Image prefill | once | once (needs MM prefix caching) | **once, guaranteed** |
 | Decode steps | 0 | 0 | 0 |
-| Slot distribution conditioned on | question texts, no answers | its own question only | question texts + neutral placeholder |
+| Slot distribution conditioned on | question texts, no answers | its own question only | question texts + neutral dummy letter |
 | Logits access | full vocab | top-K (sparse) | top-K (sparse) |
-| Notes | chat-template assembly, max control | `enable_prefix_caching` on by default | read at placeholder positions via `prompt_logprobs` |
+| Notes | chat-template assembly, max control | `enable_prefix_caching` on by default | dummy-letter slots read via `prompt_logprobs` |
 
 Measured runs of all three engines on a single crop (Qwen3.8-27B): [docs/runtime-en.md](docs/runtime-en.md).
 

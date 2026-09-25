@@ -41,14 +41,23 @@ def _question_lines(k: int, q: QuestionSpec) -> tuple[list[str], str]:
 
 def build_question_text(
     questions: tuple[QuestionSpec, ...], placeholder: str | None = None,
+    fill_dummy: bool = False,
 ) -> tuple[str, tuple[Slot, ...]]:
-    """多问题文本 + 槽位表。placeholder 非空时（策略二b）槽位填中性占位符。"""
+    """多问题文本 + 槽位表。
+
+    fill_dummy=True 时每问槽位填"超出候选范围的哑字母"（如 4 候选填 E）：
+    in-context 锚定"答案槽=字母"格式且不引入候选内容，供 prompt_logprobs
+    路径定位读取（空槽会被强指令模型用 <|im_end|>/散文挤掉字母）。
+    """
+    from .encoding import dummy_letter
+
     lines: list[str] = []
     slots: list[Slot] = []
     for k, q in enumerate(questions, start=1):
         qlines, anchor = _question_lines(k, q)
+        fill = (dummy_letter(len(q.effective_options)) if fill_dummy else placeholder) or ""
         lines.extend(qlines)
-        lines.append(anchor + (placeholder or ""))
+        lines.append(anchor + fill)
         slots.append(Slot(q.qid, anchor))
     return "\n".join(lines), tuple(slots)
 

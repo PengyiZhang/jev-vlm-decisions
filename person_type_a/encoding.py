@@ -22,6 +22,17 @@ def check_letters_single_token(tokenizer: TokenizerLike) -> list[str]:
     return [l for l in LETTERS if len(tokenizer.encode(l, add_special_tokens=False)) != 1]
 
 
+def dummy_letter(k: int) -> str:
+    """第 k 个候选之后的第一个字母：作为槽位哑填充，不在候选集内。
+
+    prompt_logprobs 路径用它填充答案槽，in-context 锚定"答案=字母"的
+    格式而不引入候选内容。
+    """
+    if k >= len(LETTERS):
+        raise ValueError(f"候选数 {k} 已占满字母表，无哑字母可用")
+    return LETTERS[k]
+
+
 def letter_token_id(tokenizer: TokenizerLike, letter: str, context: str = "：") -> int:
     """按上下文后缀解析字母 token id。
 
