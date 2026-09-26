@@ -182,3 +182,49 @@ Steady-state takeaways:
    cached, the four short requests cost nearly nothing).
 3. **plogprob's per-position top-K carries fixed overhead**: p95 swings to
    307 ms on gemma; on 27B the decode advantage swamps it and it is fastest.
+
+## CIFAR-10 Four-Way Comparison: Letter-Slot vs JSON vs Zero-Shot vs LoRA Training
+
+> Full GRPO training pipeline in `person_type_a/train.py`, data adapter in `dataset.py`.
+> Same val split (200 samples), same model (gemma-4-E4B), same A100-80G.
+
+| Method | Accuracy | Latency/sample | Confidence | ECE | Parse rate |
+| --- | --- | --- | --- | --- | --- |
+| JSON generation (zero-shot) | **89.5%** | 500 ms | ❌ none | ❌ none | 100% |
+| Letter-slot single-forward (zero-shot) | **1.0%** | 115 ms | 95.5% (inflated) | 94.5% | N/A |
+| Letter-slot + LoRA 5% data | 12.0% | 127 ms | 19.3% (honest) | 8.3% | N/A |
+| Letter-slot + LoRA full training | ? (running) | ~120 ms | ? | ? | ? |
+
+### Key findings
+
+1. **JSON generation dominates zero-shot**: VLMs are pretrained to "see image →
+   generate class name" but NOT "see image → output letter code". The letter-slot
+   requires a three-step compression (visual understanding → class mapping →
+   letter mapping) that is outside the pretrained distribution. laya confirms:
+   "a fast base to specialise, **not** a zero-shot decision engine".
+2. **Letter-slot zero-shot ECE = 94.5%**: the model gives 95% confidence on
+   things it completely does not understand — the extreme form of softmax
+   overconfidence.
+3. **GRPO + proper-reward calibration is immediate**: after training on just 5%
+   of data, ECE drops from 94.5% to 8.3% — the model learns to admit uncertainty
+   (confidence drops from inflated 95.5% to honest 19.3%).
+4. **The correct narrative**: letter-slot is NOT a zero-shot method; it is a
+   "train once, serve fast forever" production optimization:
+
+```text
+Cold start: JSON generation (89.5%, 500ms) → distill labels → GRPO train letter-slot LoRA
+Production: Letter-slot inference (target ≈85-95%, ~120ms, 4.3× speedup + calibration + gating)
+```
+
+5. **Speed advantage only materializes after training**: 115ms vs 500ms (4.3×)
+   is meaningless at zero-shot (1% vs 89.5% accuracy); it matters only when
+   trained accuracy approaches JSON accuracy.
+
+### Post-training comparison (ecosystem data)
+
+| Project | Training data | Letter-slot accuracy | Reference (Jev official) |
+| --- | --- | --- | --- |
+| kev | trained | 0.917 | 0.965 |
+| nimble | 2,676 examples | 0.748 | 0.760 |
+| decider-2b | 942K examples | 0.766 | 0.727 (exceeds) |
+| laya typed-decisions | 2,000 decisions | 0.766 | 0.727 |
