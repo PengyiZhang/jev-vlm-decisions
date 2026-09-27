@@ -154,6 +154,7 @@ def main() -> None:
                                   tokenizer.encode(letter)[0])
             mu = mu[:, letter_ids]
 
+            sigma = 0.0
             if args.pure_ce:
                 import torch.nn.functional as F
                 loss = F.cross_entropy(mu, gold)
