@@ -193,7 +193,7 @@ Steady-state takeaways:
 | JSON generation (zero-shot) | **89.5%** | 500 ms | ❌ none | ❌ none | 100% |
 | Letter-slot single-forward (zero-shot) | **1.0%** | 115 ms | 95.5% (inflated) | 94.5% | N/A |
 | Letter-slot + LoRA 5% data | 12.0% | 127 ms | 19.3% (honest) | 8.3% | N/A |
-| Letter-slot + LoRA full training | ? (running) | ~120 ms | ? | ? | ? |
+| Letter-slot + LoRA GRPO 40K steps | **10.5%** | 128 ms | 12.7% (honest) | **2.2%** | N/A |
 
 ### Key findings
 
@@ -228,3 +228,63 @@ Production: Letter-slot inference (target ≈85-95%, ~120ms, 4.3× speedup + cal
 | nimble | 2,676 examples | 0.748 | 0.760 |
 | decider-2b | 942K examples | 0.766 | 0.727 (exceeds) |
 | laya typed-decisions | 2,000 decisions | 0.766 | 0.727 |
+
+
+### Full GRPO Training Results and Root Cause Analysis
+
+40000 steps × 1 epoch (gemma-4-E4B, ~8 hours on A100-80G):
+
+| Metric | Value | Assessment |
+| --- | --- | --- |
+| accuracy | 10.5% | ≈ 10-class random baseline |
+| avg_confidence | 12.7% | Matches actual accuracy (≈1/11 uniform) |
+| ECE | 2.2% | Near-perfect calibration |
+| train loss | 1.75 → 0.10 → 0.45 | Dips then rises (see below) |
+
+### Why below random? Systematic diagnosis
+
+**Below random (1.0% < 10%) means the model systematically picks wrong letters — not "can't" but "picks wrong".**
+
+Anchor top-5 token diagnosis:
+
+| Sample | gold class | gold letter | model top-1 | Conclusion |
+| --- | --- | --- | --- | --- |
+| 0 | horse | F | C | Tries to output a letter but picks wrong |
+| 1 | automobile | I | C | Tries but picks wrong |
+| 2 | deer | H | 
+ / F | Newline competes + F |
+| 4 | airplane | G | 
+ / L | Newline competes + L |
+
+Token ID verification: `bare == context-resolved` (identical). **No extraction bug.**
+
+**Root cause: not lack of capability, but the letter mapping requires a multi-hop reasoning chain compressed into a single forward pass.**
+
+| Path | Reasoning chain | Seen in pretraining? |
+| --- | --- | --- |
+| JSON generation | see image → "horse" → generate "horse" | ✅ millions of times |
+| Letter-slot single forward | see image → "horse" → scan option list → find "horse" at position 6 → extract "F" from "(F)" → output token "F" | ❌ never |
+
+Like a fluent English speaker doing "hear English word → output Morse code" for the first time — they know English but haven't learned the mapping.
+
+### Why did GRPO training decrease accuracy?
+
+Loss trajectory reveals a **σ-annealing trap**:
+
+| Phase | σ | GRPO policy gradient | CE anchor | Result |
+| --- | --- | --- | --- | --- |
+| Early | 0.35-0.40 (large noise) | Weak (advantage≈0) | **dominant** | Model learns mapping, loss drops |
+| Late | 0.10-0.20 (small noise) | **strong** (large advantage) | suppressed | Pulled toward "uniform output", loss rises |
+
+**The proper-reward "honesty trap"**: when the model is uncertain, outputting uniform
+distribution is the optimal proper-scoring strategy (higher reward than "try to
+discriminate but might be wrong"). GRPO discovers this in late training and actively
+destroys the mapping learned by CE in early training.
+
+### Fix approaches
+
+| Approach | Change | Rationale |
+| --- | --- | --- |
+| **1. Pure CE training** (current experiment) | `--lambda-ce 10` or remove GRPO | CE directly rewards "pick the right letter", not "admit you don't know" |
+| 2. Curriculum | CE to convergence → GRPO calibration fine-tune | Learn first, calibrate second |
+| 3. No σ annealing | Keep σ=0.4 | Keep policy gradient always weaker than CE |
