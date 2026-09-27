@@ -288,3 +288,48 @@ destroys the mapping learned by CE in early training.
 | **1. Pure CE training** (current experiment) | `--lambda-ce 10` or remove GRPO | CE directly rewards "pick the right letter", not "admit you don't know" |
 | 2. Curriculum | CE to convergence → GRPO calibration fine-tune | Learn first, calibrate second |
 | 3. No σ annealing | Keep σ=0.4 | Keep policy gradient always weaker than CE |
+
+
+### Pure-CE Training Results (40K steps, controlled comparison with GRPO)
+
+| Metric | Pure CE 40K | GRPO 40K | Difference |
+| --- | --- | --- | --- |
+| accuracy | **10.0%** | 10.5% | Both at random baseline |
+| ECE | 3.3% | 2.2% | GRPO slightly better |
+| confidence | 13.3% | 12.7% | Both near uniform |
+| train loss | 0.29-0.31 (stable) | 0.45 (rising) | CE doesn't rise |
+| duration | 7.6 hours | 7.9 hours | — |
+
+**Key conclusion: pure CE and GRPO converge to the same accuracy (~10% = random). The training method is not the bottleneck.**
+
+Training loss of 0.3 is far below the 11-class random CE loss (≈2.4), meaning the model does learn the mapping on the training set — but it completely fails to generalize to the val set. This is a severe train-test gap.
+
+### Qwen3.8-27B Cross-Model Validation
+
+| Model | JSON (zero-shot) | Letter-slot (zero-shot) | Gap |
+| --- | --- | --- | --- |
+| gemma-4-E4B (4B) | 89.5% | 1.0% | 88.5pp |
+| **Qwen3.8-27B (27B)** | **94.5%** | **1.5%** | **93pp** |
+
+Letter-slot zero-shot failure is a **format-level universal problem**, independent of model size (4B~27B consistent).
+
+### Complete Experiment Matrix (6 conditions)
+
+| # | Method | Training | accuracy | ECE | Conclusion |
+| --- | --- | --- | --- | --- | --- |
+| 1 | JSON generation | zero | **89.5%** | — | Model naturally classifies |
+| 2 | Letter-slot zero-shot | zero | 1.0% | 94.5% | No letter mapping |
+| 3 | Letter-slot + GRPO 5K | 5000 | 12.0% | 8.3% | Slight improvement |
+| 4 | Letter-slot + GRPO 40K | 40000 | 10.5% | 2.2% | Converges to random |
+| 5 | Letter-slot + pure-CE 40K | 40000 | 10.0% | 3.3% | Also converges to random |
+| 6 | Letter-slot zero-shot (Qwen-27B) | zero | 1.5% | 94.5% | Cross-model consistent failure |
+
+### Root Cause and Next Steps
+
+| Possible root cause | Evidence | Ecosystem comparison |
+| --- | --- | --- |
+| LoRA rank 8 too small (2.85M params) | Train loss 0.3 (effective on train) but doesn't generalize | kev rank16, nimble full-param, decider-2b 942K |
+| Order augmentation prevents memorization | Each sample has different letter mapping | laya uses soft-target distillation to 0.766 |
+| Single-step compression capacity insufficient | "image→class→lookup→letter" 3 hops in 1 forward | Jev trained 2 years on this specifically |
+
+**Next directions**: larger LoRA rank (8→32/64), distillation route (JSON 89.5% outputs as pseudo-labels), or architectural changes (kev pointer head).
