@@ -22,6 +22,8 @@ def main() -> None:
     ap.add_argument("--micro-batch", type=int, default=4)
     ap.add_argument("--grad-accum", type=int, default=8)
     ap.add_argument("--G", type=int, default=4)
+    ap.add_argument("--pure-ce", action="store_true",
+                    help="纯 CE 训练（跳过 GRPO 噪声采样，只算交叉熵）")
     ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--sigma-max", type=float, default=0.4)
     ap.add_argument("--sigma-min", type=float, default=0.1)
@@ -78,8 +80,10 @@ def main() -> None:
                         w_sph=args.w_sph, lambda_ce=args.lambda_ce)
 
     anchor_ids = tokenizer.encode("答案：", add_special_tokens=False)
+    # 每步处理 micro_batch 个样本，循环应遍历全部样本
+    # （grad_accum 只控制 optimizer.step() 频率，不缩减样本数）
     total_samples = len(train_ds) * args.epochs
-    total_steps = total_samples // (args.micro_batch * args.grad_accum)
+    total_steps = total_samples // args.micro_batch
     if args.max_steps > 0:
         total_steps = min(total_steps, args.max_steps)
 
@@ -150,10 +154,14 @@ def main() -> None:
                                   tokenizer.encode(letter)[0])
             mu = mu[:, letter_ids]
 
-            sigma = sigma_schedule(step, total_steps,
-                                    args.sigma_max, args.sigma_min)
-            loss_fn.sigma = sigma
-            loss = loss_fn(mu, gold)
+            if args.pure_ce:
+                import torch.nn.functional as F
+                loss = F.cross_entropy(mu, gold)
+            else:
+                sigma = sigma_schedule(step, total_steps,
+                                        args.sigma_max, args.sigma_min)
+                loss_fn.sigma = sigma
+                loss = loss_fn(mu, gold)
             loss = loss / args.grad_accum
             loss.backward()
 
