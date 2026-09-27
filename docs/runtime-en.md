@@ -333,3 +333,31 @@ Letter-slot zero-shot failure is a **format-level universal problem**, independe
 | Single-step compression capacity insufficient | "image→class→lookup→letter" 3 hops in 1 forward | Jev trained 2 years on this specifically |
 
 **Next directions**: larger LoRA rank (8→32/64), distillation route (JSON 89.5% outputs as pseudo-labels), or architectural changes (kev pointer head).
+
+
+### Rank-32 Result: Capacity Is Not the Bottleneck
+
+| Condition | LoRA rank | accuracy | vs rank-8 |
+| --- | --- | --- | --- |
+| Pure CE rank 8 | 8 | 10.0% | — |
+| **Pure CE rank 32** | **32** | **8.0%** | **worse** |
+
+### Complete Experiment Matrix (8 conditions, final)
+
+| # | Method | rank | Training | accuracy | ECE | Conclusion |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | JSON generation | — | zero | **89.5%** | — | Model naturally classifies |
+| 2 | Letter-slot zero-shot | — | zero | 1.0% | 94.5% | Letter mapping OOD |
+| 3 | GRPO 5K | 8 | 5000 | 12.0% | 8.3% | Slight improvement |
+| 4 | GRPO 40K | 8 | 40000 | 10.5% | 2.2% | σ trap → converges to uniform |
+| 5 | Pure CE 40K | 8 | 40000 | 10.0% | 3.3% | Also converges to random |
+| 6 | Qwen-27B zero-shot | — | zero | 1.5% | 94.5% | Cross-model consistent |
+| 7 | **Pure CE 40K rank32** | **32** | 40000 | **8.0%** | 8.0% | **Capacity is NOT the bottleneck** |
+| 8 | Pointer head | 8 | 40000 | TBD | — | Marker detection bug, to be fixed |
+
+### Final Conclusions
+
+LoRA fine-tuning (rank 8 or 32) + 40K samples cannot teach gemma-4-E4B the
+visual-to-letter single-step mapping. All training methods converge to 8-12%.
+Ruled out: training method, LoRA capacity, model size.
+Remaining: pointer head (architectural), full fine-tuning, larger data + model.
