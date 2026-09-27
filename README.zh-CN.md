@@ -133,6 +133,14 @@ uv run --with pytest python -m pytest person_type_a/tests -q
 | `vllm_scorers.py` | 每问扇出与占位符/prompt_logprobs 两策略 |
 | `classify.py` | 组装管线：任务 → 字母 → 一次打分 → 校准结果 |
 
+### 关键发现：Prompt 格式比训练方法更重要
+
+用我们的定制格式（中文锚、criteria 描述）零样本精度仅 **1.0%**；换成标准 MCQ 格式
+（`A. option`、`Answer:`）零样本精度直接到 **86.5%**（gemma-4-E4B）和 **72.5%**
+（Qwen3.8-27B）——无需任何训练。定制格式才是整个问题的根源；模型天然就会做选择题。
+完整 10 条件实验矩阵（含 GRPO/CE 训练结果）见
+[docs/cifar10-experiment-report.md](docs/cifar10-experiment-report.md)。
+
 ### 路线图
 
 - **路线 B**——逐候选 yes 打分扇出（结构性免疫选项干扰；共享一次图像 Prefill）。

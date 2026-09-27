@@ -133,6 +133,15 @@ uv run --with pytest python -m pytest person_type_a/tests -q
 | `vllm_scorers.py` | per-question fan-out and placeholder/prompt-logprobs strategies |
 | `classify.py` | orchestration: task → letters → one scoring pass → calibrated results |
 
+### Key Finding: Prompt Format Matters More Than Training
+
+Zero-shot letter-slot accuracy with our custom format (Chinese anchor, criteria
+descriptions): **1.0%**. With a standard MCQ format (`A. option`, `Answer:`): **86.5%**
+(gemma-4-E4B) and **72.5%** (Qwen3.8-27B) — no training needed. The custom format was
+the entire problem; models already know how to answer multiple-choice questions.
+See [docs/cifar10-experiment-report.md](docs/cifar10-experiment-report.md) for the
+full 10-condition experiment matrix including GRPO/CE training results.
+
 ### Roadmap
 
 - **Route B** — per-candidate yes-scoring fan-out (structurally immune to option interference; shares one image prefill).
