@@ -9,6 +9,7 @@ sys.path.insert(0, ".")
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
+    ap.add_argument("--lora", default=None, help="LoRA adapter path (optional)")
     ap.add_argument("--n", type=int, default=200)
     ap.add_argument("--data-root", default="/tmp/cifar10")
     args = ap.parse_args()
@@ -24,6 +25,10 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     model = AutoModelForImageTextToText.from_pretrained(
         args.model, dtype=torch.bfloat16, device_map="auto")
+    if args.lora:
+        from peft import PeftModel
+        print(f"Loading LoRA from {args.lora}...")
+        model = PeftModel.from_pretrained(model, args.lora)
     model.eval()
 
     ds = CIFAR10LetterSlot(root=args.data_root, split="val",

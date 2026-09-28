@@ -9,6 +9,11 @@
     airport ground staff (0.85)  flight attendant (0.10)  passenger (0.05)
 ```
 
+**Validated on CIFAR-10**: standard MCQ format + RLCD training (GRPO + proper-reward, LoRA rank 8) achieves
+**97.0% accuracy, ECE 2.65%, 133ms** — beating a 27B model's JSON generation (94.5%, 846ms) with a 4B model
+at **6.4× the speed**. Zero-shot standard MCQ already reaches 86.5%. Full 11-condition experiment matrix:
+[docs/cifar10-experiment-report.md](docs/cifar10-experiment-report.md)
+
 ### Why
 
 Asking a VLM to "classify this image and reply in JSON" pays for a full autoregressive loop: dozens to hundreds of decode steps, format errors, and uncalibrated confidence. For closed-set decisions — routing, gating, attribute tagging — none of that is necessary.

@@ -9,6 +9,11 @@
     airport ground staff (0.85)  flight attendant (0.10)  passenger (0.05)
 ```
 
+**CIFAR-10 实测验证**：标准 MCQ 格式 + RLCD 训练（GRPO + proper-reward，LoRA rank 8）达到
+**97.0% 精度、ECE 2.65%、133ms**——4B 模型击败 27B JSON 生成（94.5%，846ms），加速 **6.4×**。
+零样本标准 MCQ 即可达 86.5%。完整 11 条件实验矩阵见
+[docs/cifar10-experiment-report.md](docs/cifar10-experiment-report.md)
+
 ### 为什么
 
 让 VLM"分类这张图并用 JSON 回答"要付出完整自回归循环的代价：几十到上百步解码、格式错误、未校准的置信度。对闭集决策——路由、门控、属性打标——这些代价都可以免掉。
