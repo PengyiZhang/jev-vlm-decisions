@@ -52,8 +52,10 @@ class CIFAR10LetterSlot:
         return len(self._indices)
 
     def _make_meta(self, label: int, epoch_seed: int = 0) -> dict:
-        rng = random.Random((label, epoch_seed, self.seed) if self.augment_order
-                            else (self.seed,))
+        # Python 3.12 起 random.seed 只接受标量，派生确定性 int 种子
+        seed = ((self.seed * 1_000_003 + epoch_seed * 101 + label)
+                if self.augment_order else self.seed)
+        rng = random.Random(seed)
         perm = list(range(len(self.classes)))
         rng.shuffle(perm)
         ordered = [self.classes[i] for i in perm] + [ABSTAIN_LABEL]
