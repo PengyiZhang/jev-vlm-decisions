@@ -14,7 +14,7 @@
 at **6.4× the speed**. Zero-shot standard MCQ already reaches 86.5%. Full 11-condition experiment matrix:
 [docs/cifar10-experiment-report.md](docs/cifar10-experiment-report.md)
 
-### Why
+## Why
 
 Asking a VLM to "classify this image and reply in JSON" pays for a full autoregressive loop: dozens to hundreds of decode steps, format errors, and uncalibrated confidence. For closed-set decisions — routing, gating, attribute tagging — none of that is necessary.
 
@@ -25,9 +25,9 @@ This project follows the decision-model pattern popularized by [Jev](https://doc
 - **Calibration as a first-class concern.** Raw softmax is over-confident (a recurring finding across Jev reproductions). Temperatures are fitted per (question type × candidate count) bucket on a held-out labeled set, in the spirit of RLCD-style calibrated training — but training-free.
 - **Abstention built in.** Every question carries an explicit `__insufficient_evidence__` slot; when it wins, the result is routed to a human, never auto-executed.
 
-The full design rationale, failure modes, and an 18-repository field study of the Jev ecosystem live in the companion essay [`understanding-jev`](https://github.com/PengyiZhang/understanding-jev). Both write-ups ship with this repo (in Chinese): the long-form essay [docs/jev-starter.md](docs/jev-starter.md) and the ecosystem field study [docs/jev-ecosystem-research.md](docs/jev-ecosystem-research.md). Also included: a deep dive into `laya`, the encoder-route decision engine — its application surface incl. RAG ranking via embedding shortlists, and how proper-scoring-rule (RLCD-style) training turns calibration into a property of the objective — [docs/laya-deep-dive.md](docs/laya-deep-dive.md).
+The full design rationale, failure modes, and an 18-repository field study of the Jev ecosystem live in the companion essay [`understanding-jev`](https://github.com/PengyiZhang/understanding-jev). Both write-ups ship with this repo (in Chinese): the long-form essay [docs/jev-starter.md](docs/jev-starter.md) and the ecosystem field study [docs/jev-ecosystem-research.md](docs/jev-ecosystem-research.md). Also included: a deep dive into `laya`, the encoder-route decision engine — [docs/laya-deep-dive.md](docs/laya-deep-dive.md).
 
-### How it works
+## How it works
 
 ```text
 system:  <your task instruction>            ← task injection: any decision task
@@ -47,11 +47,11 @@ one forward pass
    └─ mask to letter tokens → softmax(T_bucket) → distribution + gate + abstain mass
 ```
 
-- **Task injection via the system prompt.** The engine is task-agnostic: your scenario JSON defines the instruction, judging criteria, and questions. Person-type classification is just the built-in demo; any closed-set visual decision works.
-- **Canonical option order** (sorted + trailing abstain slot) removes prompt-order jitter; criteria live in the shared instruction area.
-- **Three-level gating** on calibrated confidence: `auto ≥ 0.90`, `review 0.60–0.90`, `human < 0.60`; an abstaining top choice always routes to human.
+- **Task injection via the system prompt.** The engine is task-agnostic: your scenario JSON defines the instruction, judging criteria, and questions.
+- **Canonical option order** (sorted + trailing abstain slot) removes prompt-order jitter.
+- **Three-level gating** on calibrated confidence: `auto ≥ 0.90`, `review 0.60–0.90`, `human < 0.60`.
 
-### Install & quickstart
+## Install & quickstart
 
 Requires Python 3.10+ and [`uv`](https://docs.astral.sh/uv/).
 
@@ -67,7 +67,7 @@ uv run --with torch --with transformers --with pillow \
 
 Startup self-checks: every letter must be a single token, and every answer anchor must be locatable in the tokenized prompt — failures exit immediately instead of producing garbage.
 
-### Defining a scenario
+## Defining a scenario
 
 ```jsonc
 {
@@ -90,7 +90,7 @@ Startup self-checks: every letter must be a single token, and every answer ancho
 - `binary`: fixed `no / unclear / yes` + abstain.
 - The `system` field is the task-injection point — swap it (and the questions) to repurpose the engine for damage inspection, document triage, UI-state checks, etc.
 
-### Engines
+## Engines
 
 | | `transformers` | `vllm-perq` | `vllm-plogprob` |
 | --- | --- | --- | --- |
@@ -103,20 +103,16 @@ Startup self-checks: every letter must be a single token, and every answer ancho
 
 Measured runs of all three engines on a single crop (Qwen3.8-27B): [docs/runtime-en.md](docs/runtime-en.md).
 
-All three engines share the same chat-template assembly (`apply_chat_template`); image placeholders are injected by the model's own template. GPU selection for vLLM engines is via `CUDA_VISIBLE_DEVICES` (there is no `device` flag).
-
-### Calibration
+## Calibration
 
 Zero-shot probabilities are normalized, not calibrated. The pipeline:
 
-1. Collect labeled crops from your **production detector** (same resolution/composition distribution), split by person/video source — never by frame — into `train / calibration / test`.
+1. Collect labeled crops from your **production detector**, split by person/video source into `train / calibration / test`.
 2. Run the scorer at temperature 1.0, dump slot scores.
 3. Fit one temperature per `(question kind × K)` bucket by NLL grid search (`calibrator.py`), save `calibrator.json`.
 4. Serve with `--calibrator calibrator.json`; monitor ECE on the test split.
 
-Until a calibrator is supplied, treat the confidence values as ranking-only.
-
-### Tests
+## Tests
 
 Pure-Python core; no torch/vLLM needed:
 
@@ -124,40 +120,84 @@ Pure-Python core; no torch/vLLM needed:
 uv run --with pytest python -m pytest person_type_a/tests -q
 ```
 
-### Project layout
+## Project layout
+
+### Inference core (no ML dependencies for tests)
 
 | Module | Role |
 | --- | --- |
-| `schema.py` | scenario/question config, canonical ordering, abstain slot, K ≤ 26 guard |
-| `encoding.py` | letter assignment, single-token checks, in-context token-id resolution |
-| `prompt.py` | system/question text builders and shared chat-message assembly |
-| `readout.py` | masked softmax (sparse top-K aware), three-level gating |
-| `calibrator.py` | per-bucket temperature fitting, ECE, `calibrator.json` I/O |
+| `schema.py` | Scenario/question config, canonical ordering, abstain slot, K ≤ 26 guard |
+| `encoding.py` | Letter assignment, single-token checks, in-context token-id resolution |
+| `prompt.py` | System/question text builders, shared chat-message assembly |
+| `readout.py` | Masked softmax (sparse top-K aware), three-level gating |
+| `calibrator.py` | Per-bucket temperature fitting, ECE, `calibrator.json` I/O |
 | `engine.py` | `ClassifyTask` + `Scorer` protocol + fakes for dependency-free tests |
-| `transformers_scorer.py` | chat-template assembly, single forward, all slots at once |
-| `vllm_scorers.py` | per-question fan-out and placeholder/prompt-logprobs strategies |
-| `classify.py` | orchestration: task → letters → one scoring pass → calibrated results |
+| `classify.py` | Orchestration: task → letters → one scoring pass → calibrated results |
 
-### Key Finding: Prompt Format Matters More Than Training
+### Inference engines (lazy-import torch/vLLM)
 
-Zero-shot letter-slot accuracy with our custom format (Chinese anchor, criteria
-descriptions): **1.0%**. With a standard MCQ format (`A. option`, `Answer:`): **86.5%**
-(gemma-4-E4B) and **72.5%** (Qwen3.8-27B) — no training needed. The custom format was
-the entire problem; models already know how to answer multiple-choice questions.
-See [docs/cifar10-experiment-report.md](docs/cifar10-experiment-report.md) for the
-full 10-condition experiment matrix including GRPO/CE training results.
+| Module | Role |
+| --- | --- |
+| `transformers_scorer.py` | Chat-template assembly, single forward, all slots at once |
+| `vllm_scorers.py` | Per-question fan-out (`vllm-perq`) + dummy-letter `prompt_logprobs` (`vllm-plogprob`) |
+| `run_demo.py` | CLI: scenario + model + image → per-question distributions |
+| `benchmark.py` | Warm-up + repeated inference speed benchmark (min/mean/median/p95) |
 
-### Roadmap
+### Training pipeline (CIFAR-10 validated)
 
-- **Route B** — per-candidate yes-scoring fan-out (structurally immune to option interference; shares one image prefill).
-- **Route C** — LoRA fine-tuning on letter-slot CE with order augmentation (the nimble/decider recipe) once ≥300 labels per class accumulate.
-- Remote service scorers (OpenAI-compatible endpoints, shared vLLM server with cross-tenant continuous batching).
+| Module | Role |
+| --- | --- |
+| `proper_reward.py` | Strictly proper scoring rules (log + spherical) for GRPO reward |
+| `grpo_trainer.py` | GRPO loss: noise sampling, group advantage, policy gradient + CE anchor |
+| `dataset.py` | CIFAR-10 → letter-slot adapter (order augmentation, 4-way split) |
+| `train.py` | Training CLI: custom format (GRPO / `--pure-ce` switchable) |
+| `train_mcq.py` | Training CLI: **standard MCQ format** (RLCD, breakthrough result) |
+| `pointer_head.py` | Cross-attention pointer head architecture (kev-style) |
+| `train_pointer.py` | Pointer head training CLI (marker detection WIP) |
 
-### Acknowledgments
+### Evaluation & baselines
 
-- [TypeSafe's Jev](https://docs.typesafe.ai/) and Archer Hume's architecture write-ups for the decision-model pattern this project implements.
-- The open reproduction community — `kev` (pointer-head + branch masks), `bespokelabsai/nimble` (open recipe + human-labeled benchmarks), `Mapika/decider-2b` (three primitives), `rlcd-modernbert-151m` (per-cardinality temperatures) — for empirically validating the design choices summarized here.
+| Module | Role |
+| --- | --- |
+| `evaluate.py` | Unified eval CLI (`--mode letter/json`, `--lora`, ECE) |
+| `eval_mcq.py` | Standard MCQ eval (`--model`, `--lora`, accuracy/ECE/latency) |
+| `json_baseline.py` | JSON generation baseline for speed comparison |
+| `distill.py` | Distillation: JSON pseudo-labels → GRPO letter-slot LoRA |
 
-### License
+### Tests (15 files, 61+ cases)
+
+All in `person_type_a/tests/`: schema, encoding, prompt, readout, calibrator, classify, engines, scorers, scenarios, proper_reward, grpo_trainer, dataset, benchmark, json_baseline.
+
+### Documentation
+
+| Doc | Content |
+| --- | --- |
+| [cifar10-experiment-report.md](docs/cifar10-experiment-report.md) | **Full 11-condition experiment matrix** (format/training/model ablation, RLCD breakthrough) |
+| [runtime-en.md](docs/runtime-en.md) / [runtime-zh.md](docs/runtime-zh.md) | Three-engine measured runs, JSON baseline comparison, steady-state benchmarks |
+| [jev-starter.md](docs/jev-starter.md) | Long-form essay: mechanism / failure modes / design patterns / production architecture |
+| [jev-ecosystem-research.md](docs/jev-ecosystem-research.md) | 18-repo Jev ecosystem field study |
+| [laya-deep-dive.md](docs/laya-deep-dive.md) | Encoder-route decision engine: RAG ranking, RLCD training |
+
+## Development timeline
+
+| Date | Milestone |
+| --- | --- |
+| 2026-09-21 | Route A implementation: letter-slot + three engines + 61 tests |
+| 2026-09-22 | vLLM dual-strategy unification on chat templates; steady-state benchmarks (7–21× over JSON) |
+| 2026-09-23 | JSON generation baseline comparison (4.3× speedup at 27B); gemma-4-E4B cross-engine runs |
+| 2026-09-25 | GRPO training pipeline (proper_reward + dataset + grpo_trainer + train); CIFAR-10 four-way comparison |
+| 2026-09-26 | GRPO 40K training → **σ-annealing trap identified** (converges to honest-uniform); pure CE control |
+| 2026-09-27 | Rank-32 experiment (capacity NOT the bottleneck); pointer head architecture; Qwen-27B cross-model validation |
+| 2026-09-28 | **Standard MCQ breakthrough**: zero-shot 86.5% (format was the bottleneck, not model capability) |
+| 2026-09-28 | **RLCD training result: 97.0% accuracy, ECE 2.65%, 133ms** — 4B model beats 27B JSON baseline |
+
+## Roadmap
+
+- **Pointer head fix**: marker detection for cross-attention option scoring (bypasses letter mapping entirely)
+- **Multi-question MCQ**: extend single-question MCQ format to multi-attribute (per-question independent MCQ blocks)
+- **Production serving**: vLLM server mode with continuous batching, OpenAI-compatible endpoints
+- **Domain adaptation**: distill from JSON generation on production domain data
+
+## License
 
 MIT — see [LICENSE](LICENSE).
