@@ -154,6 +154,20 @@ uv run --with pytest python -m pytest person_type_a/tests -q
 | `json_baseline.py` | JSON 生成基线（速度对比） |
 | `distill.py` | 蒸馏：JSON 伪标签 → GRPO 字母槽 LoRA |
 
+### Safeguard 适配（`safeguard/`，格式微调 guard 模型）
+
+把 **Qwen3Guard-Gen-Domain-0.6B**（输出三行格式已被 SFT 固化的 guard 模型）改造成
+单前向决策引擎。核心成果：原生词表 15 槽答案卡 + RLCD 训练，在 6000 条养老领域
+评测集上达到 **safety 96.2% / 类别 F1 0.841 / binary ECE 0.41% / 33ms（~12× 加速）**。
+
+| 模块 | 职责 |
+| --- | --- |
+| `safeguard/card.py` | 原生槽答案卡：槽定义、prompt 构建、尾部对齐锚定位、单前向读取 |
+| `safeguard/train_card.py` | 多槽 RLCD 训练（GRPO + proper-reward，`--pure-ce` 对照） |
+| `safeguard/eval_card.py` | 全链评测（`--model` / `--lora` / `--calibrator`） |
+| `safeguard/merge_lora.py` / `calibrate_card.py` / `check_categories.py` | adapter 合并 / 分桶温度拟合 / 数据词表审计 |
+| `safeguard/native.py` / `chain.py` / `mcq.py` / `run_phase1.py` / `run_phase2.py` | Phase 1-2 路线：原生锚定、链式读取、字母 MCQ |
+
 ### 测试（15 个文件，61+ 用例）
 
 全部在 `person_type_a/tests/`。
@@ -163,6 +177,7 @@ uv run --with pytest python -m pytest person_type_a/tests -q
 | 文档 | 内容 |
 | --- | --- |
 | [cifar10-experiment-report.md](docs/cifar10-experiment-report.md) | **完整 11 条件实验矩阵**（格式/训练/模型消融，RLCD 突破） |
+| [safeguard-experiment-report.md](docs/safeguard-experiment-report.md) | 格式微调 guard 模型的单前向改造（三路线→链式→答案卡 RLCD→校准） |
 | [runtime-zh.md](docs/runtime-zh.md) / [runtime-en.md](docs/runtime-en.md) | 三引擎实测、JSON 基线对比、稳态基准 |
 | [jev-starter.md](docs/jev-starter.md) | 万字解读长文：机制 / 失败模式 / 设计模式 / 生产架构 |
 | [jev-ecosystem-research.md](docs/jev-ecosystem-research.md) | 18 仓 Jev 生态实地研究 |
@@ -181,6 +196,7 @@ uv run --with pytest python -m pytest person_type_a/tests -q
 | 2026-09-28 | **标准 MCQ 突破**：零样本 86.5%（格式才是瓶颈，不是模型能力） |
 | 2026-09-28 | **RLCD 训练成果：97.0% 精度、ECE 2.65%、133ms**——4B 击败 27B JSON 基线 |
 | 2026-09-29 | 纯 CE 对照（标准 MCQ）：96.5% / ECE 2.57%——好格式上两种目标都成功，RLCD 再挤 +1.0pp 精度 |
+| 2026-09-29 | **Safeguard 答案卡**：格式微调 Qwen3Guard → 15 槽单前向（safety 96.2%、类别 F1 0.841、ECE 0.41%、33ms、~12×） |
 
 ## 路线图
 

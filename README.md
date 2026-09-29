@@ -164,6 +164,18 @@ uv run --with pytest python -m pytest person_type_a/tests -q
 | `json_baseline.py` | JSON generation baseline for speed comparison |
 | `distill.py` | Distillation: JSON pseudo-labels → GRPO letter-slot LoRA |
 
+### Safeguard adaptation (`safeguard/`, format-tuned guard model)
+
+Adapting **Qwen3Guard-Gen-Domain-0.6B** — a guard model whose three-line output format is baked in by SFT — into a single-forward decision engine. Key result: a 15-slot native-vocabulary answer card + RLCD reaches **96.2% safety / category F1 0.841 / binary ECE 0.41% / 33 ms (~12× over generation)** on a 6,000-sample elderly-care eval set.
+
+| Module | Role |
+| --- | --- |
+| `safeguard/card.py` | Native-slot answer card: slot defs, prompt build, tail-aligned anchor location, single-forward read |
+| `safeguard/train_card.py` | Multi-slot RLCD training (GRPO + proper-reward, `--pure-ce` control) |
+| `safeguard/eval_card.py` | Full-chain eval (`--model` / `--lora` / `--calibrator`) |
+| `safeguard/merge_lora.py` / `calibrate_card.py` / `check_categories.py` | Adapter merge / bucket temperature fitting / data-vocabulary audit |
+| `safeguard/native.py` / `chain.py` / `mcq.py` / `run_phase1.py` / `run_phase2.py` | Phase 1–2 routes: native anchor, chain reading, letter MCQ |
+
 ### Tests (15 files, 61+ cases)
 
 All in `person_type_a/tests/`: schema, encoding, prompt, readout, calibrator, classify, engines, scorers, scenarios, proper_reward, grpo_trainer, dataset, benchmark, json_baseline.
@@ -173,6 +185,7 @@ All in `person_type_a/tests/`: schema, encoding, prompt, readout, calibrator, cl
 | Doc | Content |
 | --- | --- |
 | [cifar10-experiment-report.md](docs/cifar10-experiment-report.md) | **Full 11-condition experiment matrix** (format/training/model ablation, RLCD breakthrough) |
+| [safeguard-experiment-report.md](docs/safeguard-experiment-report.md) | Adapting a format-tuned guard model to single-forward decisions (three routes → chain → answer card RLCD → calibration) |
 | [runtime-en.md](docs/runtime-en.md) / [runtime-zh.md](docs/runtime-zh.md) | Three-engine measured runs, JSON baseline comparison, steady-state benchmarks |
 | [jev-starter.md](docs/jev-starter.md) | Long-form essay: mechanism / failure modes / design patterns / production architecture |
 | [jev-ecosystem-research.md](docs/jev-ecosystem-research.md) | 18-repo Jev ecosystem field study |
@@ -191,6 +204,7 @@ All in `person_type_a/tests/`: schema, encoding, prompt, readout, calibrator, cl
 | 2026-09-28 | **Standard MCQ breakthrough**: zero-shot 86.5% (format was the bottleneck, not model capability) |
 | 2026-09-28 | **RLCD training result: 97.0% accuracy, ECE 2.65%, 133ms** — 4B model beats 27B JSON baseline |
 | 2026-09-29 | Pure-CE control on standard MCQ: 96.5% / ECE 2.57% — both objectives succeed on good formats; RLCD adds +1.0pp accuracy |
+| 2026-09-29 | **Safeguard answer card**: format-tuned Qwen3Guard → 15-slot single-forward (safety 96.2%, cat F1 0.841, ECE 0.41%, 33 ms, ~12×) |
 
 ## Roadmap
 
