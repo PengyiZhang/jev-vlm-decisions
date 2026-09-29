@@ -2,7 +2,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from person_type_a.grpo_trainer import GRPOLoss, sample_zero_mean_noise, sigma_schedule
+from demos.person_type_a.grpo_trainer import GRPOLoss, sample_zero_mean_noise, sigma_schedule
 
 
 def test_sigma_schedule_cosine_annealing():
@@ -38,3 +38,33 @@ def test_policy_gradient_flows_to_mu():
     loss.backward()
     assert mu.grad is not None
     assert mu.grad.abs().max() > 0
+
+
+def test_policy_gradient_survives_beyond_ce():
+    """回归：PG 项自身必须贡献非零梯度（λ_ce=0 时梯度仍非零）。
+
+    历史缺陷：z = mu + eps 使 log_pi 里的 z-mu 全导数为零，
+    GRPOLoss 梯度与纯 CE 逐位相同（策略梯度从未生效）。
+    """
+    torch.manual_seed(0)
+    mu = torch.randn(2, 4, requires_grad=True)
+    gold = torch.eye(4)[:2]
+    loss_fn = GRPOLoss(G=8, sigma=0.2, lambda_ce=0.0)
+    loss_fn(mu, gold).backward()
+    assert mu.grad is not None
+    assert mu.grad.abs().max() > 1e-6
+
+
+def test_full_loss_gradient_differs_from_pure_ce():
+    """回归：总损失梯度 ≠ 纯 CE 梯度（同一 mu、同一 gold 下）。"""
+    torch.manual_seed(0)
+    mu0 = torch.randn(2, 4)
+    gold = torch.eye(4)[:2]
+
+    mu1 = mu0.clone().requires_grad_(True)
+    GRPOLoss(G=8, sigma=0.2, lambda_ce=1.0)(mu1, gold).backward()
+
+    mu2 = mu0.clone().requires_grad_(True)
+    torch.nn.functional.cross_entropy(mu2, gold).backward()
+
+    assert (mu1.grad - mu2.grad).abs().max() > 1e-6

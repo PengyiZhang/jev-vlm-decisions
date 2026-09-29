@@ -42,7 +42,10 @@ class GRPOLoss:
         for _ in range(self.G):
             with torch.no_grad():
                 eps = sample_zero_mean_noise(mu, self.sigma)
-            z = mu + eps
+            # 采样点 z 必须视为常数（对齐 laya：z = logits.detach() + eps）。
+            # 若写成 z = mu + eps，则 log_pi 中的 z-mu 在 autograd 下全导数恒为
+            # 零，策略梯度项整体失效（回归测试 test_policy_gradient_survives_beyond_ce）。
+            z = mu.detach() + eps
             probs = F.softmax(z, dim=-1)
             reward = proper_reward(probs, gold, self.w_sph)
             log_pi = -((z - mu) ** 2).sum(-1) / (2 * self.sigma ** 2)
