@@ -9,7 +9,7 @@
     airport ground staff (0.85)  flight attendant (0.10)  passenger (0.05)
 ```
 
-**CIFAR-10 实测验证**：标准 MCQ 格式 + RLCD 训练（GRPO + proper-reward，LoRA rank 8）达到
+**CIFAR-10 实测验证**：标准 MCQ 格式 + CE 微调（LoRA rank 8；原归因 RLCD，后经消融证伪——GRPO 项因 detach 缺陷未生效，见消融报告）达到
 **97.0% 精度、ECE 2.65%、133ms**——4B 模型击败 27B JSON 生成（94.5%，846ms），加速 **6.4×**。
 零样本标准 MCQ 即可达 86.5%。完整 11 条件实验矩阵见
 [docs/cifar10-experiment-report.md](docs/cifar10-experiment-report.md)
@@ -141,7 +141,7 @@ uv run --with pytest python -m pytest person_type_a/tests -q
 | `grpo_trainer.py` | GRPO 损失：噪声采样、组内 advantage、策略梯度 + CE 引导 |
 | `dataset.py` | CIFAR-10 → 字母槽适配（顺序增广、四路切分） |
 | `train.py` | 训练 CLI：定制格式（GRPO / `--pure-ce` 可切换） |
-| `train_mcq.py` | 训练 CLI：**标准 MCQ 格式**（RLCD，突破性成果） |
+| `train_mcq.py` | 训练 CLI：**标准 MCQ 格式**（CE 微调；原标注 RLCD） |
 | `pointer_head.py` | 交叉注意力指针头架构（kev 式） |
 | `train_pointer.py` | 指针头训练 CLI（marker 检测待修复） |
 
@@ -157,13 +157,13 @@ uv run --with pytest python -m pytest person_type_a/tests -q
 ### Safeguard 适配（`safeguard/`，格式微调 guard 模型）
 
 把 **Qwen3Guard-Gen-Domain-0.6B**（输出三行格式已被 SFT 固化的 guard 模型）改造成
-单前向决策引擎。核心成果：原生词表 15 槽答案卡 + RLCD 训练，在 6000 条养老领域
+单前向决策引擎。核心成果：原生词表 15 槽答案卡 + 多槽 CE 微调，在 6000 条养老领域
 评测集上达到 **safety 96.2% / 类别 F1 0.841 / binary ECE 0.41% / 33ms（~12× 加速）**。
 
 | 模块 | 职责 |
 | --- | --- |
 | `safeguard/card.py` | 原生槽答案卡：槽定义、prompt 构建、尾部对齐锚定位、单前向读取 |
-| `safeguard/train_card.py` | 多槽 RLCD 训练（GRPO + proper-reward，`--pure-ce` 对照） |
+| `safeguard/train_card.py` | 多槽训练（GRPO + proper-reward，`--pure-ce` 对照；GRPO 已证相对 CE 无增益） |
 | `safeguard/eval_card.py` | 全链评测（`--model` / `--lora` / `--calibrator`） |
 | `safeguard/merge_lora.py` / `calibrate_card.py` / `check_categories.py` | adapter 合并 / 分桶温度拟合 / 数据词表审计 |
 | `safeguard/native.py` / `chain.py` / `mcq.py` / `run_phase1.py` / `run_phase2.py` | Phase 1-2 路线：原生锚定、链式读取、字母 MCQ |
@@ -176,7 +176,8 @@ uv run --with pytest python -m pytest person_type_a/tests -q
 
 | 文档 | 内容 |
 | --- | --- |
-| [cifar10-experiment-report.md](docs/cifar10-experiment-report.md) | **完整 11 条件实验矩阵**（格式/训练/模型消融，RLCD 突破） |
+| [cifar10-experiment-report.md](docs/cifar10-experiment-report.md) | **完整 11 条件实验矩阵**（格式/训练/模型消融） |
+| [rlcd-ablation-report.md](docs/rlcd-ablation-report.md) | **勘误 + 四臂消融**：GRPO+proper-reward 相对 CE 无增益（one-hot 劣化校准；软标签无增益） |
 | [safeguard-experiment-report.md](docs/safeguard-experiment-report.md) | 格式微调 guard 模型的单前向改造（三路线→链式→答案卡 RLCD→校准） |
 | [runtime-zh.md](docs/runtime-zh.md) / [runtime-en.md](docs/runtime-en.md) | 三引擎实测、JSON 基线对比、稳态基准 |
 | [jev-starter.md](docs/jev-starter.md) | 万字解读长文：机制 / 失败模式 / 设计模式 / 生产架构 |
@@ -195,8 +196,9 @@ uv run --with pytest python -m pytest person_type_a/tests -q
 | 2026-09-27 | Rank-32 实验（容量不是瓶颈）；指针头架构；Qwen-27B 跨模型验证 |
 | 2026-09-28 | **标准 MCQ 突破**：零样本 86.5%（格式才是瓶颈，不是模型能力） |
 | 2026-09-28 | **RLCD 训练成果：97.0% 精度、ECE 2.65%、133ms**——4B 击败 27B JSON 基线 |
-| 2026-09-29 | 纯 CE 对照（标准 MCQ）：96.5% / ECE 2.57%——好格式上两种目标都成功，RLCD 再挤 +1.0pp 精度 |
+| 2026-09-29 | 纯 CE 对照（标准 MCQ）：96.5% / ECE 2.57%（当时两臂实际都是 CE） |
 | 2026-09-29 | **Safeguard 答案卡**：格式微调 Qwen3Guard → 15 槽单前向（safety 96.2%、类别 F1 0.841、ECE 0.41%、33ms、~12×） |
+| 2026-09-30 | **勘误 + 四臂消融**：发现并修复 GRPO detach 缺陷；真 RLCD A/B 在 card/MCQ/laya 上均无增益——CE 即目标 |
 
 ## 路线图
 

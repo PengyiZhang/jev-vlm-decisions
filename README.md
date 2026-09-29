@@ -9,7 +9,7 @@
     airport ground staff (0.85)  flight attendant (0.10)  passenger (0.05)
 ```
 
-**Validated on CIFAR-10**: standard MCQ format + RLCD training (GRPO + proper-reward, LoRA rank 8) achieves
+**Validated on CIFAR-10**: standard MCQ format + CE fine-tuning (LoRA rank 8; originally attributed to RLCD — the GRPO term was inert due to a detach bug, see the ablation report) achieves
 **97.0% accuracy, ECE 2.65%, 133ms** — beating a 27B model's JSON generation (94.5%, 846ms) with a 4B model
 at **6.4× the speed**. Zero-shot standard MCQ already reaches 86.5%. Full 11-condition experiment matrix:
 [docs/cifar10-experiment-report.md](docs/cifar10-experiment-report.md)
@@ -151,7 +151,7 @@ uv run --with pytest python -m pytest person_type_a/tests -q
 | `grpo_trainer.py` | GRPO loss: noise sampling, group advantage, policy gradient + CE anchor |
 | `dataset.py` | CIFAR-10 → letter-slot adapter (order augmentation, 4-way split) |
 | `train.py` | Training CLI: custom format (GRPO / `--pure-ce` switchable) |
-| `train_mcq.py` | Training CLI: **standard MCQ format** (RLCD, breakthrough result) |
+| `train_mcq.py` | Training CLI: **standard MCQ format** (CE fine-tuning; originally labeled RLCD) |
 | `pointer_head.py` | Cross-attention pointer head architecture (kev-style) |
 | `train_pointer.py` | Pointer head training CLI (marker detection WIP) |
 
@@ -166,12 +166,12 @@ uv run --with pytest python -m pytest person_type_a/tests -q
 
 ### Safeguard adaptation (`safeguard/`, format-tuned guard model)
 
-Adapting **Qwen3Guard-Gen-Domain-0.6B** — a guard model whose three-line output format is baked in by SFT — into a single-forward decision engine. Key result: a 15-slot native-vocabulary answer card + RLCD reaches **96.2% safety / category F1 0.841 / binary ECE 0.41% / 33 ms (~12× over generation)** on a 6,000-sample elderly-care eval set.
+Adapting **Qwen3Guard-Gen-Domain-0.6B** — a guard model whose three-line output format is baked in by SFT — into a single-forward decision engine. Key result: a 15-slot native-vocabulary answer card + multi-slot CE fine-tuning reaches **96.2% safety / category F1 0.841 / binary ECE 0.41% / 33 ms (~12× over generation)** on a 6,000-sample elderly-care eval set.
 
 | Module | Role |
 | --- | --- |
 | `safeguard/card.py` | Native-slot answer card: slot defs, prompt build, tail-aligned anchor location, single-forward read |
-| `safeguard/train_card.py` | Multi-slot RLCD training (GRPO + proper-reward, `--pure-ce` control) |
+| `safeguard/train_card.py` | Multi-slot training (GRPO + proper-reward with `--pure-ce` control; GRPO shown inert vs CE) |
 | `safeguard/eval_card.py` | Full-chain eval (`--model` / `--lora` / `--calibrator`) |
 | `safeguard/merge_lora.py` / `calibrate_card.py` / `check_categories.py` | Adapter merge / bucket temperature fitting / data-vocabulary audit |
 | `safeguard/native.py` / `chain.py` / `mcq.py` / `run_phase1.py` / `run_phase2.py` | Phase 1–2 routes: native anchor, chain reading, letter MCQ |
@@ -184,7 +184,8 @@ All in `person_type_a/tests/`: schema, encoding, prompt, readout, calibrator, cl
 
 | Doc | Content |
 | --- | --- |
-| [cifar10-experiment-report.md](docs/cifar10-experiment-report.md) | **Full 11-condition experiment matrix** (format/training/model ablation, RLCD breakthrough) |
+| [cifar10-experiment-report.md](docs/cifar10-experiment-report.md) | **Full 11-condition experiment matrix** (format/training/model ablation) |
+| [rlcd-ablation-report.md](docs/rlcd-ablation-report.md) | **Errata + four-arm A/B**: GRPO+proper-reward shows no gain over CE (one-hot: worse calibration; soft labels: no gain) |
 | [safeguard-experiment-report.md](docs/safeguard-experiment-report.md) | Adapting a format-tuned guard model to single-forward decisions (three routes → chain → answer card RLCD → calibration) |
 | [runtime-en.md](docs/runtime-en.md) / [runtime-zh.md](docs/runtime-zh.md) | Three-engine measured runs, JSON baseline comparison, steady-state benchmarks |
 | [jev-starter.md](docs/jev-starter.md) | Long-form essay: mechanism / failure modes / design patterns / production architecture |
@@ -203,8 +204,9 @@ All in `person_type_a/tests/`: schema, encoding, prompt, readout, calibrator, cl
 | 2026-09-27 | Rank-32 experiment (capacity NOT the bottleneck); pointer head architecture; Qwen-27B cross-model validation |
 | 2026-09-28 | **Standard MCQ breakthrough**: zero-shot 86.5% (format was the bottleneck, not model capability) |
 | 2026-09-28 | **RLCD training result: 97.0% accuracy, ECE 2.65%, 133ms** — 4B model beats 27B JSON baseline |
-| 2026-09-29 | Pure-CE control on standard MCQ: 96.5% / ECE 2.57% — both objectives succeed on good formats; RLCD adds +1.0pp accuracy |
+| 2026-09-29 | Pure-CE control on standard MCQ: 96.5% / ECE 2.57% (both arms effectively CE at the time) |
 | 2026-09-29 | **Safeguard answer card**: format-tuned Qwen3Guard → 15-slot single-forward (safety 96.2%, cat F1 0.841, ECE 0.41%, 33 ms, ~12×) |
+| 2026-09-30 | **Errata + four-arm ablation**: GRPO detach bug found & fixed; true RLCD A/B shows no gain over CE on card/MCQ/laya — CE is the objective |
 
 ## Roadmap
 

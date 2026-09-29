@@ -144,7 +144,12 @@ Refusal:                     ← 槽 14：Yes / No（仅 assistant 响应样本�
 目标（RLCD 训后）：safety ≥97%、类别 F1 >80%、refusal >95%、
 双 ECE <3%，保持 1 前向 ~36ms。
 
-### RLCD 训后结果（24K 样本 1 epoch，LoRA rank 8，94 分钟）
+### 训后结果（24K 样本 1 epoch，LoRA rank 8，94 分钟）
+
+> **勘误（2026-09-30）**：本次训练名义为 GRPO+proper-reward，因
+> `grpo_trainer` 的 detach 缺陷实际由**多槽 CE** 驱动；修复后真 RLCD
+> 重训全面劣于此结果（ECE 0.52%→3.75%）。数字有效，归因见
+> `docs/rlcd-ablation-report.md`。
 
 **全量 val（6000 条，LoRA 已合并，`output/card_rlcd_eval_full/`）：**
 
@@ -175,10 +180,11 @@ NLL 网格 [0.5, 4.0]），结果 **safety|3 与 binary|2 双桶 T=1.0 全胜**�
 | safety（3 候选） | 0.57%（acc 96.07%） | 无变化 |
 | binary（54018 槽） | 0.37% | 无变化 |
 
-解读：proper scoring rule 的期望最优策略就是输出真实概率——RLCD 训练
-把校准**内化进了权重**，事后温度校准（jev 生态对零样本模型的标配
-补救）在此已无事可做。对照：零样本 MCQ 的 Qwen-27B ECE 17.7%
-必须校准；本任务零样本卡 binary ECE 2.36% → RLCD 后 0.41%。
+解读：**勘误后归因——CE + 任务本身已校准**（one-hot 标签下
+proper-reward 与 CE 共享最优解；本次训练实际由 CE 驱动），事后温度
+校准（jev 生态对零样本模型的标配补救）在此无事可做。对照：零样本
+MCQ 的 Qwen-27B ECE 17.7% 必须校准；本任务零样本卡 binary ECE
+2.36% → 训后 0.41%。
 
 **门控质量**（holdout，safety 槽）：auto@0.90 段覆盖 86.9% 样本、
 其中准确率 99.45%——置信度干净地分出了可自动执行段。
